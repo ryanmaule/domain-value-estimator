@@ -110,3 +110,21 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // Rest of the server.js code remains unchanged...
+
+// Serve static files in production
+if (process.env.NODE_ENV === 'production') {
+  const distPath = join(__dirname, '../dist');
+  app.use(express.static(distPath));
+  
+  // Handle client-side routing
+  app.get('*', (req, res) => {
+    res.sendFile(join(distPath, 'index.html'));
+  });
+}
+
+// Start server
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
+  console.log(`Dev mode: ${DEV_MODE}`);
+  console.log(`Environment: ${process.env.NODE_ENV}`);
+});
