@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "concurrently \"vite\" \"node api/server.js\"",
     "build": "tsc && vite build",
-    "start": "node api/server.js",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "node api/server.js"
   },
   "dependencies": {
     "@stripe/stripe-js": "^2.4.0",

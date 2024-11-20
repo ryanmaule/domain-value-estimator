@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import OpenAI from 'openai';
+import Stripe from 'stripe';
 import { createCheckoutSession } from './stripe.js';
 
 dotenv.config();
@@ -11,6 +12,11 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 3001;
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Initialize Stripe
+const stripe = new Stripe(process.env.VITE_STRIPE_SECRET_KEY, {
+  apiVersion: '2023-10-16'
+});
 
 // Initialize OpenAI
 const openai = new OpenAI({
@@ -20,7 +26,18 @@ const openai = new OpenAI({
 // Basic middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.raw({ type: 'application/json' }));
+
+// Special handling for Stripe webhooks
+app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
+
+// Regular JSON parsing for other routes
+app.use((req, res, next) => {
+  if (req.path === '/api/stripe/webhook') {
+    next();
+  } else {
+    express.json()(req, res, next);
+  }
+});
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
@@ -82,25 +99,15 @@ app.post('/api/keywords', async (req, res) => {
 
 // Stripe checkout endpoint
 app.post('/api/stripe/create-checkout-session', async (req, res) => {
-  console.log('Request headers:', req.headers);
-  console.log('Request body:', req.body);
-  
   try {
     const { successUrl, cancelUrl, email } = req.body;
     
     if (!successUrl || !cancelUrl) {
-      console.error('Missing required parameters:', { successUrl, cancelUrl });
       return res.status(400).json({ 
         message: 'Missing required parameters',
         error: 'Missing successUrl or cancelUrl'
       });
     }
-
-    console.log('Creating Stripe checkout session...', {
-      successUrl,
-      cancelUrl,
-      email
-    });
 
     const session = await createCheckoutSession({
       successUrl,
@@ -108,20 +115,12 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
       email
     });
 
-    console.log('Session created successfully:', {
-      sessionId: session.id,
-      url: session.url
-    });
-
     res.json({ 
       sessionId: session.id,
       url: session.url
     });
   } catch (error) {
-    console.error('Checkout session creation failed:', {
-      error: error.message,
-      stack: error.stack
-    });
+    console.error('Checkout session creation failed:', error);
     res.status(500).json({ 
       message: error.message || 'Failed to create checkout session',
       error: {
@@ -130,6 +129,52 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
         code: error.code
       }
     });
+  }
+});
+
+// Stripe webhook endpoint
+app.post('/api/stripe/webhook', async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  const webhookSecret = process.env.VITE_STRIPE_WEBHOOK_SECRET;
+
+  try {
+    if (!webhookSecret) {
+      throw new Error('Webhook secret is not configured');
+    }
+
+    const event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      webhookSecret
+    );
+
+    console.log('Webhook received:', event.type);
+
+    switch (event.type) {
+      case 'checkout.session.completed': {
+        const session = event.data.object;
+        console.log('Checkout completed:', {
+          customerId: session.customer,
+          subscriptionId: session.subscription,
+          email: session.customer_details?.email
+        });
+        break;
+      }
+      
+      case 'customer.subscription.deleted': {
+        const subscription = event.data.object;
+        console.log('Subscription canceled:', {
+          customerId: subscription.customer,
+          subscriptionId: subscription.id
+        });
+        break;
+      }
+    }
+
+    res.json({ received: true });
+  } catch (error) {
+    console.error('Webhook error:', error.message);
+    return res.status(400).send(`Webhook Error: ${error.message}`);
   }
 });
 

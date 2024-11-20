@@ -22,14 +22,7 @@ const stripe = new Stripe(stripeSecretKey, {
 });
 
 export async function createCheckoutSession(data) {
-  console.log('Creating checkout session with data:', {
-    successUrl: data.successUrl,
-    cancelUrl: data.cancelUrl,
-    priceId: stripePriceId
-  });
-
   try {
-    // Convert relative URLs to absolute URLs using Stripe's own domain
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [
@@ -39,9 +32,8 @@ export async function createCheckoutSession(data) {
         },
       ],
       mode: 'subscription',
-      // Let Stripe handle the full URL
-      success_url: `${process.env.VITE_APP_URL || 'http://localhost:5173'}${data.successUrl}`,
-      cancel_url: `${process.env.VITE_APP_URL || 'http://localhost:5173'}${data.cancelUrl}`,
+      success_url: data.successUrl,
+      cancel_url: data.cancelUrl,
       allow_promotion_codes: true,
       billing_address_collection: 'required',
       customer_email: data.email,
@@ -52,22 +44,9 @@ export async function createCheckoutSession(data) {
       }
     });
 
-    console.log('Stripe session created successfully:', {
-      sessionId: session.id,
-      url: session.url
-    });
-
     return session;
   } catch (error) {
-    console.error('Stripe session creation error:', {
-      error: error.message,
-      type: error.type,
-      code: error.code,
-      param: error.param,
-      detail: error.detail || error.raw?.message
-    });
-
-    // Re-throw with more context
+    console.error('Stripe session creation error:', error);
     throw new Error(`Stripe session creation failed: ${error.message}`);
   }
 }

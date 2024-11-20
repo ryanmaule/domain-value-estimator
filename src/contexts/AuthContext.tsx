@@ -28,7 +28,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [searchesRemaining, setSearchesRemaining] = useState(DAILY_SEARCH_LIMIT);
 
   const decrementSearches = () => {
-    if (BYPASS_SEARCH_LIMIT || user) {
+    if (BYPASS_SEARCH_LIMIT || user?.isPro) {
       return;
     }
     
