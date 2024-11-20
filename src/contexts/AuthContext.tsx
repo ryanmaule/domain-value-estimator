@@ -40,10 +40,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const data = await response.json();
         setUser(data.user);
       } else {
+        console.error('Session check failed:', {
+          status: response.status,
+          statusText: response.statusText
+        });
         setUser(null);
       }
     } catch (error) {
-      console.error('Session check failed:', error);
+      console.error('Session check error:', {
+        name: error instanceof Error ? error.name : 'Unknown',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
       setUser(null);
     } finally {
       setLoading(false);
@@ -68,7 +76,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string) => {
     try {
+      console.log('Starting login process:', { email, devMode: DEV_MODE });
       setError(null);
+      
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
@@ -78,36 +88,75 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         credentials: 'include'
       });
 
+      console.log('Login response:', {
+        status: response.status,
+        statusText: response.statusText
+      });
+
       const data = await response.json();
+      console.log('Login response data:', data);
 
       if (!response.ok) {
-        throw new Error(data.message || 'Login failed');
+        const error = new Error(data.message || 'Login failed');
+        console.error('Login failed:', {
+          status: response.status,
+          data,
+          error
+        });
+        throw error;
       }
 
       if (DEV_MODE) {
+        console.log('Dev mode login data:', data);
+        if (!data.user) {
+          console.error('Dev mode login failed: No user data received');
+          throw new Error('Dev mode login failed: Missing user data');
+        }
         setUser(data.user);
         toast.success('Logged in successfully');
       } else {
         toast.success('Check your email for the login link!');
       }
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('Login error details:', {
+        name: error instanceof Error ? error.name : 'Unknown',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        devMode: DEV_MODE
+      });
       setError(error as Error);
       toast.error('Login failed. Please try again.');
+      throw error;
     }
   };
 
   const logout = async () => {
     try {
+      console.log('Starting logout process');
       setError(null);
-      await fetch('/api/auth/logout', {
+      
+      const response = await fetch('/api/auth/logout', {
         method: 'POST',
         credentials: 'include'
       });
+
+      console.log('Logout response:', {
+        status: response.status,
+        statusText: response.statusText
+      });
+
+      if (!response.ok) {
+        throw new Error('Logout request failed');
+      }
+
       setUser(null);
       toast.success('Logged out successfully');
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('Logout error details:', {
+        name: error instanceof Error ? error.name : 'Unknown',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
       setError(error as Error);
       toast.error('Failed to log out. Please try again.');
     }

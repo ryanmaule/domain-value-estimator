@@ -12,8 +12,15 @@ import ContactPage from './pages/ContactPage';
 import AboutPage from './pages/AboutPage';
 
 function App() {
+  const isDevMode = import.meta.env.VITE_DEV_MODE === 'true';
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex flex-col">
+      {isDevMode && (
+        <div className="bg-yellow-500 text-white text-center py-1 px-4 text-sm font-medium">
+          Development Mode Enabled - All Pro Features Unlocked
+        </div>
+      )}
       <Toaster position="top-center" />
       <Routes>
         <Route path="/" element={<HomePage />} />

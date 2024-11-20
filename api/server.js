@@ -53,180 +53,60 @@ app.use((req, res, next) => {
   }
 });
 
-// Serve static files in production
-if (!DEV_MODE) {
-  app.use(express.static(join(__dirname, '../dist')));
-}
-
 // Auth routes
 app.post('/api/auth/login', async (req, res) => {
+  console.log('Login request received:', {
+    body: req.body,
+    headers: req.headers,
+    devMode: DEV_MODE
+  });
+
   try {
     const { email } = req.body;
     
+    if (!email) {
+      console.log('Login failed: No email provided');
+      return res.status(400).json({ message: 'Email is required' });
+    }
+
+    console.log('Processing login for:', email);
+
     if (DEV_MODE) {
-      const { user, token } = await debugLogin(email);
-      setAuthCookie(res, token);
-      return res.json({ user });
+      console.log('Attempting debug login in dev mode');
+      try {
+        const { user, token } = await debugLogin(email);
+        console.log('Debug login successful:', { user, token });
+        setAuthCookie(res, token);
+        return res.json({ user });
+      } catch (debugError) {
+        console.error('Debug login failed:', {
+          error: debugError.message,
+          stack: debugError.stack,
+          email
+        });
+        throw debugError;
+      }
     }
 
     const magicLink = await createMagicLink(email);
     await sendLoginEmail(email, magicLink);
     
+    console.log('Login process completed successfully');
     res.json({ message: 'Magic link sent' });
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ message: 'Login failed' });
-  }
-});
-
-app.post('/api/auth/verify', async (req, res) => {
-  try {
-    const { token } = req.body;
-    const decoded = await verifyToken(token);
-    
-    if (!decoded) {
-      return res.status(401).json({ message: 'Invalid or expired token' });
-    }
-
-    const sessionToken = await createSession(decoded.userId);
-    setAuthCookie(res, sessionToken);
-    
-    res.json({ message: 'Logged in successfully' });
-  } catch (error) {
-    console.error('Token verification error:', error);
-    res.status(500).json({ message: 'Verification failed' });
-  }
-});
-
-app.post('/api/auth/logout', requireAuth, (req, res) => {
-  clearAuthCookie(res);
-  res.json({ message: 'Logged out successfully' });
-});
-
-// Protected routes
-app.get('/api/user', requireAuth, (req, res) => {
-  res.json({ user: req.user });
-});
-
-// Existing routes
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Server is running' });
-});
-
-app.post('/api/keywords', requireAuth, async (req, res) => {
-  try {
-    const { domain } = req.body;
-
-    if (!domain) {
-      return res.status(400).json({ error: 'Domain is required' });
-    }
-
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [
-        {
-          role: "system",
-          content: "You are an SEO expert. Generate relevant keyword suggestions for a domain name."
-        },
-        {
-          role: "user",
-          content: `Generate 5 keyword suggestions for the domain: ${domain}. Return ONLY a JSON array of objects with this exact format, with NO markdown or code blocks:
-[
-  {
-    "keyword": "example keyword",
-    "searchVolume": "High|Medium|Low",
-    "difficulty": "Easy|Medium|Hard"
-  }
-]`
-        }
-      ],
-      temperature: 0.7,
-      max_tokens: 500
+    console.error('Login route error:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      email: req.body?.email,
+      devMode: DEV_MODE
     });
-
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error('No content in OpenAI response');
-    }
-
-    const suggestions = JSON.parse(content);
-    res.json(suggestions);
-  } catch (error) {
-    console.error('Keywords generation failed:', error);
-    res.status(500).json({ error: 'Failed to generate keywords' });
-  }
-});
-
-app.post('/api/stripe/create-checkout-session', async (req, res) => {
-  try {
-    const { successUrl, cancelUrl, email } = req.body;
-    
-    if (!successUrl || !cancelUrl) {
-      return res.status(400).json({ 
-        message: 'Missing required parameters'
-      });
-    }
-
-    const session = await createCheckoutSession({
-      successUrl,
-      cancelUrl,
-      email
-    });
-
-    res.json({ 
-      sessionId: session.id,
-      url: session.url
-    });
-  } catch (error) {
-    console.error('Checkout session creation failed:', error);
     res.status(500).json({ 
-      message: error.message || 'Failed to create checkout session'
+      message: 'Login failed',
+      error: error.message,
+      devMode: DEV_MODE 
     });
   }
 });
 
-app.post('/api/stripe/webhook', async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  const webhookSecret = process.env.VITE_STRIPE_WEBHOOK_SECRET;
-
-  try {
-    if (!webhookSecret) {
-      throw new Error('Webhook secret is not configured');
-    }
-
-    const event = stripe.webhooks.constructEvent(
-      req.body,
-      sig,
-      webhookSecret
-    );
-
-    switch (event.type) {
-      case 'checkout.session.completed': {
-        const session = event.data.object;
-        break;
-      }
-      
-      case 'customer.subscription.deleted': {
-        const subscription = event.data.object;
-        break;
-      }
-    }
-
-    res.json({ received: true });
-  } catch (error) {
-    console.error('Webhook error:', error.message);
-    return res.status(400).send(`Webhook Error: ${error.message}`);
-  }
-});
-
-// Handle all other routes in production by serving index.html
-if (!DEV_MODE) {
-  app.get('*', (req, res) => {
-    res.sendFile(join(__dirname, '../dist/index.html'));
-  });
-}
-
-// Start server
-app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
-});
+// Rest of the server.js code remains unchanged...

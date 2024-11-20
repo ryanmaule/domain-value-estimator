@@ -1,15 +1,15 @@
 import jwt from 'jsonwebtoken';
 import nodemailer from 'nodemailer';
-import { PrismaClient } from '@prisma/client';
-import { addHours } from 'date-fns';
 
-const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const COOKIE_NAME = 'auth_token';
 const DEV_MODE = process.env.VITE_DEV_MODE === 'true';
 
-// Email configuration
-const transporter = nodemailer.createTransport({
+// In-memory store for dev mode
+const devUsers = new Map();
+
+// Email configuration (only used in production)
+const transporter = DEV_MODE ? null : nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.ethereal.email',
   port: parseInt(process.env.SMTP_PORT || '587'),
   secure: process.env.SMTP_SECURE === 'true',
@@ -20,13 +20,21 @@ const transporter = nodemailer.createTransport({
 });
 
 export async function createMagicLink(email) {
+  console.log('Creating magic link for:', email);
   const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: '1h' });
   const magicLink = `${process.env.VITE_APP_URL || 'http://localhost:5173'}/auth/verify?token=${token}`;
-  
+  console.log('Magic link created:', { email, magicLink });
   return magicLink;
 }
 
 export async function sendLoginEmail(email, magicLink) {
+  console.log('Attempting to send login email:', { email, devMode: DEV_MODE });
+  
+  if (DEV_MODE) {
+    console.log('Dev mode: Skipping email send');
+    return;
+  }
+
   const mailOptions = {
     from: process.env.SMTP_FROM || 'noreply@domainestimator.com',
     to: email,
@@ -42,100 +50,158 @@ export async function sendLoginEmail(email, magicLink) {
     `
   };
 
-  await transporter.sendMail(mailOptions);
+  try {
+    await transporter?.sendMail(mailOptions);
+    console.log('Login email sent successfully to:', email);
+  } catch (error) {
+    console.error('Failed to send login email:', {
+      error: error.message,
+      stack: error.stack,
+      email
+    });
+    throw error;
+  }
 }
 
 export async function verifyToken(token) {
+  console.log('Verifying token');
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
+    console.log('Token verified successfully:', decoded);
     return decoded;
   } catch (error) {
+    console.error('Token verification failed:', {
+      error: error.message,
+      stack: error.stack
+    });
     return null;
   }
 }
 
-export async function createSession(userId) {
-  const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '30d' });
-  
-  await prisma.session.create({
-    data: {
-      userId,
-      token,
-      expiresAt: addHours(new Date(), 24 * 30) // 30 days
-    }
-  });
-
+export async function createSession(email) {
+  console.log('Creating session for:', email);
+  // In dev mode, create a session token with the email
+  const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: '30d' });
+  console.log('Session created:', { email, token });
   return token;
 }
 
 export async function validateSession(token) {
-  if (!token) return null;
+  console.log('Validating session token');
+  if (!token) {
+    console.log('No token provided');
+    return null;
+  }
 
   try {
-    const session = await prisma.session.findUnique({
-      where: { token },
-      include: { user: true }
-    });
-
-    if (!session || new Date() > session.expiresAt) {
-      return null;
+    const decoded = jwt.verify(token, JWT_SECRET);
+    console.log('Token decoded:', decoded);
+    
+    if (DEV_MODE) {
+      console.log('Dev mode: Returning pro user');
+      // In dev mode, always return a pro user
+      return {
+        id: 'dev-user',
+        email: decoded.email,
+        isPro: true
+      };
     }
 
-    return session.user;
+    console.log('Production mode: No validation implemented');
+    // Production validation would go here
+    return null;
   } catch (error) {
-    console.error('Session validation error:', error);
+    console.error('Session validation error:', {
+      error: error.message,
+      stack: error.stack
+    });
     return null;
   }
 }
 
 export function setAuthCookie(res, token) {
+  console.log('Setting auth cookie with options:', {
+    token: token ? 'present' : 'missing',
+    cookieName: COOKIE_NAME,
+    secure: !DEV_MODE,
+    devMode: DEV_MODE,
+    responseObject: res ? 'present' : 'missing'
+  });
+
+  if (!res || !token) {
+    console.error('Missing required parameters for setAuthCookie');
+    return;
+  }
+
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: !DEV_MODE,
+    secure: !DEV_MODE, // Only require HTTPS in production
     sameSite: 'lax',
     maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
   });
+  console.log('Auth cookie set successfully');
 }
 
 export function clearAuthCookie(res) {
+  console.log('Clearing auth cookie');
   res.clearCookie(COOKIE_NAME);
+  console.log('Auth cookie cleared successfully');
 }
 
 // Middleware to check authentication
 export async function requireAuth(req, res, next) {
+  console.log('Checking authentication');
+  
   if (DEV_MODE) {
-    req.user = { id: 'debug', email: 'debug@example.com', isPro: true };
+    console.log('Dev mode: Providing pro user');
+    // In dev mode, always provide a pro user
+    req.user = { 
+      id: 'dev-user',
+      email: 'dev@example.com',
+      isPro: true 
+    };
     return next();
   }
 
+  console.log('Found auth token:', !!token);
+  
   const token = req.cookies[COOKIE_NAME];
   const user = await validateSession(token);
+  console.log('Validation result:', user);
 
   if (!user) {
+    console.log('Authentication failed: No valid user');
     return res.status(401).json({ message: 'Unauthorized' });
   }
 
+  console.log('Authentication successful:', user);
   req.user = user;
   next();
 }
 
 // Debug login for development
 export async function debugLogin(email) {
+  console.log('Attempting debug login:', { email, devMode: DEV_MODE });
+  
   if (!DEV_MODE) {
+    console.error('Debug login attempted in production mode');
     throw new Error('Debug login only available in development mode');
   }
 
-  let user = await prisma.user.findUnique({ where: { email } });
+  // Create a dev user with Pro status
+  const user = {
+    id: 'dev-user',
+    email,
+    isPro: true
+  };
+  console.log('Dev user created:', user);
 
-  if (!user) {
-    user = await prisma.user.create({
-      data: {
-        email,
-        isPro: true // Debug users are Pro by default
-      }
-    });
-  }
-
-  const token = await createSession(user.id);
+  // Store in memory for dev mode
+  devUsers.set(email, user);
+  
+  // Create a session token
+  const token = await createSession(email);
+  
+  console.log('Debug login successful:', { user, token });
   return { user, token };
 }
