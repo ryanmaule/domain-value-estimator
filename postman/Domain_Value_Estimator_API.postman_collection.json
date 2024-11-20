@@ -1,0 +1,253 @@
+{
+  "info": {
+    "name": "Domain Value Estimator API",
+    "description": "API for estimating domain values using AI-powered analysis",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "8f9e2c1a-5b3e-4b4c-9d8f-3e2b7b8f9e2c"
+  },
+  "item": [
+    {
+      "name": "Single Domain Estimation",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{api_key}}",
+            "type": "text",
+            "description": "Your API key"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/estimate/:domain",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "estimate", ":domain"],
+          "variable": [
+            {
+              "key": "domain",
+              "value": "example.com",
+              "description": "Domain name to analyze"
+            }
+          ]
+        },
+        "description": "Get a detailed valuation for a single domain name"
+      },
+      "response": [
+        {
+          "name": "Successful Response",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/estimate/example.com"
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "domain": "example.com",
+            "estimatedValue": 15000,
+            "confidenceScore": 85,
+            "domainAge": "23 years 5 months",
+            "monthlyTraffic": 25000,
+            "seoScore": 78,
+            "tldValue": "High (.com)",
+            "rankingKeywords": [
+              {
+                "term": "example",
+                "position": 3
+              }
+            ],
+            "suggestedKeywords": [
+              {
+                "keyword": "example",
+                "searchVolume": "50000/mo",
+                "difficulty": "Medium"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bulk Domain Estimation",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{api_key}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"domains\": [\n        \"example1.com\",\n        \"example2.com\"\n    ]\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/estimate/bulk",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "estimate", "bulk"]
+        },
+        "description": "Get valuations for multiple domains (Pro users only)"
+      },
+      "response": [
+        {
+          "name": "Successful Response",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"domains\": [\n        \"example1.com\",\n        \"example2.com\"\n    ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/estimate/bulk"
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": [
+            {
+              "domain": "example1.com",
+              "estimatedValue": 12000,
+              "confidenceScore": 82,
+              "domainAge": "5 years 2 months",
+              "monthlyTraffic": 15000,
+              "seoScore": 72,
+              "tldValue": "High (.com)",
+              "rankingKeywords": [
+                {
+                  "term": "example1",
+                  "position": 4
+                }
+              ],
+              "suggestedKeywords": [
+                {
+                  "keyword": "example1",
+                  "searchVolume": "30000/mo",
+                  "difficulty": "Medium"
+                }
+              ]
+            },
+            {
+              "domain": "example2.com",
+              "estimatedValue": 8000,
+              "confidenceScore": 78,
+              "domainAge": "3 years 8 months",
+              "monthlyTraffic": 10000,
+              "seoScore": 65,
+              "tldValue": "High (.com)",
+              "rankingKeywords": [
+                {
+                  "term": "example2",
+                  "position": 6
+                }
+              ],
+              "suggestedKeywords": [
+                {
+                  "keyword": "example2",
+                  "searchVolume": "20000/mo",
+                  "difficulty": "Easy"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Check API Quota",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{api_key}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/quota",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "quota"]
+        },
+        "description": "Check your remaining API quota and usage limits"
+      },
+      "response": [
+        {
+          "name": "Free Tier Response",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/quota"
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "tier": "free",
+            "limit": 5,
+            "remaining": 3,
+            "reset": "2024-03-20T00:00:00.000Z"
+          }
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [""]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [""]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3001",
+      "type": "string"
+    },
+    {
+      "key": "api_key",
+      "value": "test_free",
+      "type": "string"
+    }
+  ]
+}
