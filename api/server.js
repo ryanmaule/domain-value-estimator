@@ -1,17 +1,30 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import OpenAI from 'openai';
 import Stripe from 'stripe';
 import { createCheckoutSession } from './stripe.js';
+import {
+  createMagicLink,
+  sendLoginEmail,
+  verifyToken,
+  createSession,
+  validateSession,
+  setAuthCookie,
+  clearAuthCookie,
+  requireAuth,
+  debugLogin
+} from './auth.js';
 
 dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3001;
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const DEV_MODE = process.env.VITE_DEV_MODE === 'true';
 
 // Initialize Stripe
 const stripe = new Stripe(process.env.VITE_STRIPE_SECRET_KEY, {
@@ -23,14 +36,15 @@ const openai = new OpenAI({
   apiKey: process.env.VITE_OPENAI_API_KEY
 });
 
-// Basic middleware
-app.use(cors());
-app.use(express.json());
-
 // Special handling for Stripe webhooks
 app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 
-// Regular JSON parsing for other routes
+// Regular middleware
+app.use(cors({
+  origin: process.env.VITE_APP_URL || 'http://localhost:5173',
+  credentials: true
+}));
+app.use(cookieParser());
 app.use((req, res, next) => {
   if (req.path === '/api/stripe/webhook') {
     next();
@@ -40,17 +54,66 @@ app.use((req, res, next) => {
 });
 
 // Serve static files in production
-if (process.env.NODE_ENV === 'production') {
+if (!DEV_MODE) {
   app.use(express.static(join(__dirname, '../dist')));
 }
 
-// Health check endpoint
+// Auth routes
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (DEV_MODE) {
+      const { user, token } = await debugLogin(email);
+      setAuthCookie(res, token);
+      return res.json({ user });
+    }
+
+    const magicLink = await createMagicLink(email);
+    await sendLoginEmail(email, magicLink);
+    
+    res.json({ message: 'Magic link sent' });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ message: 'Login failed' });
+  }
+});
+
+app.post('/api/auth/verify', async (req, res) => {
+  try {
+    const { token } = req.body;
+    const decoded = await verifyToken(token);
+    
+    if (!decoded) {
+      return res.status(401).json({ message: 'Invalid or expired token' });
+    }
+
+    const sessionToken = await createSession(decoded.userId);
+    setAuthCookie(res, sessionToken);
+    
+    res.json({ message: 'Logged in successfully' });
+  } catch (error) {
+    console.error('Token verification error:', error);
+    res.status(500).json({ message: 'Verification failed' });
+  }
+});
+
+app.post('/api/auth/logout', requireAuth, (req, res) => {
+  clearAuthCookie(res);
+  res.json({ message: 'Logged out successfully' });
+});
+
+// Protected routes
+app.get('/api/user', requireAuth, (req, res) => {
+  res.json({ user: req.user });
+});
+
+// Existing routes
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running' });
 });
 
-// Keywords generation endpoint
-app.post('/api/keywords', async (req, res) => {
+app.post('/api/keywords', requireAuth, async (req, res) => {
   try {
     const { domain } = req.body;
 
@@ -86,10 +149,7 @@ app.post('/api/keywords', async (req, res) => {
       throw new Error('No content in OpenAI response');
     }
 
-    // Remove any markdown code block syntax
-    const cleanContent = content.replace(/```json\n?|\n?```/g, '').trim();
-    const suggestions = JSON.parse(cleanContent);
-
+    const suggestions = JSON.parse(content);
     res.json(suggestions);
   } catch (error) {
     console.error('Keywords generation failed:', error);
@@ -97,15 +157,13 @@ app.post('/api/keywords', async (req, res) => {
   }
 });
 
-// Stripe checkout endpoint
 app.post('/api/stripe/create-checkout-session', async (req, res) => {
   try {
     const { successUrl, cancelUrl, email } = req.body;
     
     if (!successUrl || !cancelUrl) {
       return res.status(400).json({ 
-        message: 'Missing required parameters',
-        error: 'Missing successUrl or cancelUrl'
+        message: 'Missing required parameters'
       });
     }
 
@@ -122,17 +180,11 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
   } catch (error) {
     console.error('Checkout session creation failed:', error);
     res.status(500).json({ 
-      message: error.message || 'Failed to create checkout session',
-      error: {
-        message: error.message,
-        type: error.type,
-        code: error.code
-      }
+      message: error.message || 'Failed to create checkout session'
     });
   }
 });
 
-// Stripe webhook endpoint
 app.post('/api/stripe/webhook', async (req, res) => {
   const sig = req.headers['stripe-signature'];
   const webhookSecret = process.env.VITE_STRIPE_WEBHOOK_SECRET;
@@ -148,25 +200,14 @@ app.post('/api/stripe/webhook', async (req, res) => {
       webhookSecret
     );
 
-    console.log('Webhook received:', event.type);
-
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object;
-        console.log('Checkout completed:', {
-          customerId: session.customer,
-          subscriptionId: session.subscription,
-          email: session.customer_details?.email
-        });
         break;
       }
       
       case 'customer.subscription.deleted': {
         const subscription = event.data.object;
-        console.log('Subscription canceled:', {
-          customerId: subscription.customer,
-          subscriptionId: subscription.id
-        });
         break;
       }
     }
@@ -179,7 +220,7 @@ app.post('/api/stripe/webhook', async (req, res) => {
 });
 
 // Handle all other routes in production by serving index.html
-if (process.env.NODE_ENV === 'production') {
+if (!DEV_MODE) {
   app.get('*', (req, res) => {
     res.sendFile(join(__dirname, '../dist/index.html'));
   });

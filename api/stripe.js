@@ -38,10 +38,7 @@ export async function createCheckoutSession(data) {
       billing_address_collection: 'required',
       customer_email: data.email,
       automatic_tax: { enabled: true },
-      tax_id_collection: { enabled: true },
-      subscription_data: {
-        trial_period_days: 7
-      }
+      tax_id_collection: { enabled: true }
     });
 
     return session;
