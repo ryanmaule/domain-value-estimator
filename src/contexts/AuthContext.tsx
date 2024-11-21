@@ -1,11 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
-
-interface User {
-  id: string;
-  email: string;
-  isPro: boolean;
-}
+import type { User } from '../types';
 
 interface AuthContextType {
   user: User | null;
@@ -24,34 +19,36 @@ const DAILY_SEARCH_LIMIT = 5;
 const BYPASS_SEARCH_LIMIT = import.meta.env.VITE_BYPASS_SEARCH_LIMIT === 'true';
 const DEV_MODE = import.meta.env.VITE_DEV_MODE === 'true';
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+interface AuthProviderProps {
+  children: React.ReactNode;
+}
+
+export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [searchesRemaining, setSearchesRemaining] = useState(DAILY_SEARCH_LIMIT);
 
-  const checkSession = async () => {
+  const checkSession = async (): Promise<void> => {
     try {
-      const response = await fetch('/api/user', {
-        credentials: 'include'
+      const timestamp = new Date().getTime();
+      const response = await fetch(`/api/user?_=${timestamp}`, {
+        credentials: 'include',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setUser(data.user);
-      } else {
-        console.error('Session check failed:', {
-          status: response.status,
-          statusText: response.statusText
-        });
-        setUser(null);
+      if (!response.ok) {
+        throw new Error('Session check failed');
       }
+
+      const data = await response.json();
+      setUser(data.user);
     } catch (error) {
-      console.error('Session check error:', {
-        name: error instanceof Error ? error.name : 'Unknown',
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined
-      });
+      console.error('Session check error:', error);
       setUser(null);
     } finally {
       setLoading(false);
@@ -62,7 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkSession();
   }, []);
 
-  const decrementSearches = () => {
+  const decrementSearches = (): void => {
     if (BYPASS_SEARCH_LIMIT || user?.isPro) {
       return;
     }
@@ -74,75 +71,63 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const login = async (email: string) => {
+  const login = async (email: string): Promise<void> => {
     try {
-      console.log('Starting login process:', { email, devMode: DEV_MODE });
       setError(null);
       
-      const response = await fetch('/api/auth/login', {
+      const timestamp = new Date().getTime();
+      const response = await fetch(`/api/auth/login?_=${timestamp}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
         },
         body: JSON.stringify({ email }),
         credentials: 'include'
       });
 
-      console.log('Login response:', {
-        status: response.status,
-        statusText: response.statusText
-      });
+      if (!response.ok) {
+        throw new Error('Login failed');
+      }
 
       const data = await response.json();
-      console.log('Login response data:', data);
-
-      if (!response.ok) {
-        const error = new Error(data.message || 'Login failed');
-        console.error('Login failed:', {
-          status: response.status,
-          data,
-          error
-        });
-        throw error;
-      }
-
+      
       if (DEV_MODE) {
-        console.log('Dev mode login data:', data);
-        if (!data.user) {
-          console.error('Dev mode login failed: No user data received');
+        if (data.user) {
+          setUser(data.user);
+          toast.success('Logged in successfully');
+        } else {
           throw new Error('Dev mode login failed: Missing user data');
         }
-        setUser(data.user);
-        toast.success('Logged in successfully');
       } else {
-        toast.success('Check your email for the login link!');
+        if (data.magicLink) {
+          toast.success('Check your email for the login link!');
+        } else {
+          throw new Error('Login failed: Invalid response from server');
+        }
       }
     } catch (error) {
-      console.error('Login error details:', {
-        name: error instanceof Error ? error.name : 'Unknown',
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined,
-        devMode: DEV_MODE
-      });
-      setError(error as Error);
-      toast.error('Login failed. Please try again.');
+      console.error('Login error:', error);
+      setError(error instanceof Error ? error : new Error('Unknown error'));
       throw error;
     }
   };
 
-  const logout = async () => {
+  const logout = async (): Promise<void> => {
     try {
-      console.log('Starting logout process');
       setError(null);
       
-      const response = await fetch('/api/auth/logout', {
+      const timestamp = new Date().getTime();
+      const response = await fetch(`/api/auth/logout?_=${timestamp}`, {
         method: 'POST',
-        credentials: 'include'
-      });
-
-      console.log('Logout response:', {
-        status: response.status,
-        statusText: response.statusText
+        credentials: 'include',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        },
       });
 
       if (!response.ok) {
@@ -152,17 +137,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       toast.success('Logged out successfully');
     } catch (error) {
-      console.error('Logout error details:', {
-        name: error instanceof Error ? error.name : 'Unknown',
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined
-      });
-      setError(error as Error);
+      console.error('Logout error:', error);
+      setError(error instanceof Error ? error : new Error('Unknown error'));
       toast.error('Failed to log out. Please try again.');
     }
   };
 
-  const value = {
+  const value: AuthContextType = {
     user,
     loading,
     error,
@@ -180,7 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function useAuth() {
+export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');

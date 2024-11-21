@@ -2,20 +2,28 @@ import type { TrafficData } from '../types';
 
 // Traffic estimation service configuration
 const CONFIG = {
-  provider: 'none', // Options: 'semrush', 'similarweb', 'none'
+  // Provider will be auto-selected based on available API keys
+  provider: 'auto',
+
   similarweb: {
-    enabled: false,
-    apiKey: 'c308478ef2ce40488aadac3f6b553062',
+    // Enable if API key is present
+    enabled: !!import.meta.env.VITE_SIMILARWEB_API_KEY,
+    apiKey: import.meta.env.VITE_SIMILARWEB_API_KEY || '',
     baseUrl: 'https://api.similarweb.com/v1/website'
   },
+
   semrush: {
-    enabled: false,
-    apiKey: '',
+    // Enable if API key is present
+    enabled: !!import.meta.env.VITE_SEMRUSH_API_KEY,
+    apiKey: import.meta.env.VITE_SEMRUSH_API_KEY || '',
     baseUrl: 'https://api.semrush.com'
   }
 };
 
 async function getSimilarWebTraffic(domain: string): Promise<TrafficData> {
+  const startTime = performance.now();
+  console.log(`[SimilarWeb] Starting traffic analysis for ${domain}`);
+
   try {
     const response = await fetch(
       `${CONFIG.similarweb.baseUrl}/${domain}/total-traffic-and-engagement/visits?country=999&granularity=monthly&main_domain_only=false&format=json`,
@@ -31,6 +39,8 @@ async function getSimilarWebTraffic(domain: string): Promise<TrafficData> {
     }
 
     const data = await response.json();
+    const duration = performance.now() - startTime;
+    console.log(`[SimilarWeb] Analysis completed in ${duration.toFixed(0)}ms`);
 
     if (!data.visits || !data.visits.length) {
       throw new Error('No traffic data available');
@@ -54,14 +64,23 @@ async function getSimilarWebTraffic(domain: string): Promise<TrafficData> {
       monthlyVisits: Math.round(latestVisits),
       trafficTrend: trend,
       trafficConfidence: 80,
-      debug: { provider: 'similarweb', data }
+      debug: { 
+        provider: 'similarweb', 
+        data,
+        timing: Math.round(duration)
+      }
     };
   } catch (error) {
+    const duration = performance.now() - startTime;
+    console.error(`[SimilarWeb] Analysis failed after ${duration.toFixed(0)}ms:`, error);
     throw error;
   }
 }
 
 async function getSemrushTraffic(domain: string): Promise<TrafficData> {
+  const startTime = performance.now();
+  console.log(`[SEMrush] Starting traffic analysis for ${domain}`);
+
   try {
     const response = await fetch(
       `${CONFIG.semrush.baseUrl}/analytics/traffic/summary/${domain}`,
@@ -77,19 +96,29 @@ async function getSemrushTraffic(domain: string): Promise<TrafficData> {
     }
 
     const data = await response.json();
+    const duration = performance.now() - startTime;
+    console.log(`[SEMrush] Analysis completed in ${duration.toFixed(0)}ms`);
 
     return {
       monthlyVisits: Math.round(data.visits),
       trafficTrend: data.trend || 'unknown',
       trafficConfidence: 75,
-      debug: { provider: 'semrush', data }
+      debug: { 
+        provider: 'semrush', 
+        data,
+        timing: Math.round(duration)
+      }
     };
   } catch (error) {
+    const duration = performance.now() - startTime;
+    console.error(`[SEMrush] Analysis failed after ${duration.toFixed(0)}ms:`, error);
     throw error;
   }
 }
 
 export async function getTrafficEstimate(domain: string): Promise<TrafficData> {
+  const startTime = performance.now();
+  console.log(`[Traffic] Starting estimation for ${domain}`);
   const errors: any[] = [];
 
   // Try SimilarWeb if enabled
@@ -97,7 +126,7 @@ export async function getTrafficEstimate(domain: string): Promise<TrafficData> {
     try {
       return await getSimilarWebTraffic(domain);
     } catch (error) {
-      console.error('SimilarWeb estimation failed:', error);
+      console.error('[Traffic] SimilarWeb estimation failed:', error);
       errors.push({ provider: 'similarweb', error });
     }
   }
@@ -107,10 +136,13 @@ export async function getTrafficEstimate(domain: string): Promise<TrafficData> {
     try {
       return await getSemrushTraffic(domain);
     } catch (error) {
-      console.error('SEMrush estimation failed:', error);
+      console.error('[Traffic] SEMrush estimation failed:', error);
       errors.push({ provider: 'semrush', error });
     }
   }
+
+  const duration = performance.now() - startTime;
+  console.log(`[Traffic] Estimation completed in ${duration.toFixed(0)}ms with no data`);
 
   // Return unknown if no provider is available or working
   return {
@@ -119,7 +151,12 @@ export async function getTrafficEstimate(domain: string): Promise<TrafficData> {
     trafficConfidence: 0,
     debug: { 
       provider: CONFIG.provider,
-      errors: errors.length ? errors : undefined
+      enabled: {
+        similarweb: CONFIG.similarweb.enabled,
+        semrush: CONFIG.semrush.enabled
+      },
+      errors: errors.length ? errors : undefined,
+      timing: Math.round(duration)
     }
   };
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Crown, LogOut, User } from 'lucide-react';
+import { Crown, LogOut } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const UserMenu: React.FC = () => {
@@ -40,10 +40,9 @@ const UserMenu: React.FC = () => {
     <div className="flex items-center space-x-4">
       <button
         onClick={() => navigate('/account')}
-        className="flex items-center space-x-2"
+        className="text-gray-900 hover:text-indigo-600"
       >
-        <User className="w-8 h-8 text-gray-400" />
-        <span className="text-gray-900">{user.email}</span>
+        My Account
       </button>
       <button
         onClick={handleLogout}

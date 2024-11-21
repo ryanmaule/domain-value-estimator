@@ -1,136 +1,157 @@
 import { getDomainWhois } from './whoisService';
 import { getTrafficEstimate } from './trafficService';
-import { generateKeywordSuggestions } from './openaiService';
-import type { DomainAnalysis, KeywordSuggestion } from '../types';
+import { generateKeywordSuggestions, generateDomainValuation } from './openaiService';
+import { getPageSpeedScore } from './pagespeedService';
+import type { DomainAnalysis, AnalysisStage } from '../types';
 
 function getTldValue(domain: string): string {
   const tld = domain.split('.').pop()?.toLowerCase();
-  const highValueTlds = ['com', 'net', 'org'];
-  const mediumValueTlds = ['io', 'co', 'app', 'dev'];
+  const highValueTlds = ['com', 'ai', 'io'];
+  const mediumValueTlds = ['net', 'org', 'co', 'app', 'dev'];
   
   if (highValueTlds.includes(tld || '')) return `High (.${tld})`;
   if (mediumValueTlds.includes(tld || '')) return `Medium (.${tld})`;
   return `Standard (.${tld})`;
 }
 
-function calculateConfidenceScore(whoisData: any, trafficData: any): number {
-  let score = 50; // Base score
+// Track ongoing operations to prevent duplicates
+const ongoingOperations = new Map<string, Map<AnalysisStage, Promise<any>>>();
 
-  // Add confidence based on available data
-  if (whoisData.domainAge !== 'Unknown') score += 15;
-  if (trafficData.monthlyVisits !== 'Unknown') score += 15;
-  if (whoisData.registrar) score += 10;
-  if (whoisData.expiryDate) score += 10;
+// Track current stage for each domain
+const currentStages = new Map<string, AnalysisStage>();
 
-  return Math.min(score, 100);
-}
+// Updated stage order to put keywords before SEO
+const stageOrder: AnalysisStage[] = ['whois', 'traffic', 'keywords', 'seo', 'valuation'];
 
-function calculateDomainValue(domain: string, whoisData: any, trafficData: any): number {
-  let value = 500; // Base value for any domain
-
-  // Age factor
-  if (whoisData.domainAge !== 'Unknown') {
-    const years = parseInt(whoisData.domainAge);
-    if (!isNaN(years)) {
-      value += Math.min(years * 100, 2000); // Up to $2000 for age
-    }
+async function runStageOnce<T>(
+  domain: string,
+  stage: AnalysisStage,
+  operation: () => Promise<T>,
+  onStageChange?: (stage: AnalysisStage, retryCount?: number) => void
+): Promise<T> {
+  // Get or create operations map for this domain
+  let domainOperations = ongoingOperations.get(domain);
+  if (!domainOperations) {
+    domainOperations = new Map();
+    ongoingOperations.set(domain, domainOperations);
   }
 
-  // TLD factor
-  const tld = domain.split('.').pop()?.toLowerCase();
-  if (tld === 'com') value *= 1.5;
-  else if (['net', 'org'].includes(tld || '')) value *= 1.3;
-  else if (['io', 'co', 'app', 'dev'].includes(tld || '')) value *= 1.2;
-
-  // Length factor
-  const name = domain.split('.')[0];
-  if (name.length <= 4) value *= 1.5;
-  else if (name.length <= 6) value *= 1.3;
-  else if (name.length <= 8) value *= 1.1;
-
-  // Traffic factor (if available)
-  if (typeof trafficData.monthlyVisits === 'number') {
-    value += Math.min(trafficData.monthlyVisits * 0.1, 5000);
+  // Check if operation is already in progress
+  let existingOperation = domainOperations.get(stage);
+  if (existingOperation) {
+    console.log(`[Analysis] Stage ${stage} already in progress for ${domain}, waiting...`);
+    return existingOperation;
   }
 
-  return Math.round(value);
-}
-
-function generateDetailedAnalysis(domain: string, whoisData: any, trafficData: any): string {
-  const tld = domain.split('.').pop()?.toLowerCase();
-  const name = domain.split('.')[0];
+  // Only update stage if it's the next one in order
+  const currentStage = currentStages.get(domain);
+  const currentIndex = currentStage ? stageOrder.indexOf(currentStage) : -1;
+  const newIndex = stageOrder.indexOf(stage);
   
-  let analysis = `Domain Analysis for ${domain}:\n\n`;
-  
-  // Age analysis
-  analysis += `• Age: ${whoisData.domainAge}\n`;
-  if (whoisData.registrar) analysis += `• Registered with: ${whoisData.registrar}\n`;
-  if (whoisData.expiryDate) analysis += `• Expires: ${new Date(whoisData.expiryDate).toLocaleDateString()}\n`;
-  
-  // Domain characteristics
-  analysis += `\n• TLD Analysis: .${tld} ${getTldValue(domain).split(' ')[0].toLowerCase()} value TLD\n`;
-  analysis += `• Length: ${name.length} characters\n`;
-  
-  // Traffic
-  if (trafficData.monthlyVisits !== 'Unknown') {
-    analysis += `• Monthly Traffic: ${trafficData.monthlyVisits.toLocaleString()} visits\n`;
+  if (!currentStage || newIndex > currentIndex) {
+    console.log(`[Analysis] Progressing to stage ${stage} for ${domain}`);
+    currentStages.set(domain, stage);
+    onStageChange?.(stage);
   } else {
-    analysis += `• Traffic data not available\n`;
+    console.log(`[Analysis] Running stage ${stage} without updating progress (current: ${currentStage})`);
   }
+
+  // Start new operation
+  console.log(`[Analysis] Starting stage ${stage} for ${domain}`);
   
-  return analysis;
+  const operationPromise = operation().finally(() => {
+    // Clean up after operation completes
+    domainOperations?.delete(stage);
+    if (domainOperations?.size === 0) {
+      ongoingOperations.delete(domain);
+      currentStages.delete(domain);
+    }
+  });
+
+  // Store operation promise
+  domainOperations.set(stage, operationPromise);
+
+  return operationPromise;
 }
 
-export async function analyzeDomain(domain: string): Promise<DomainAnalysis> {
+export async function analyzeDomain(
+  domain: string,
+  onStageChange?: (stage: AnalysisStage, retryCount?: number) => void
+): Promise<DomainAnalysis> {
+  const startTime = performance.now();
+  console.log(`[Analysis] Starting analysis for ${domain}`);
+
   try {
     if (!domain) {
       throw new Error('Domain is required');
     }
 
-    // Get WHOIS data
-    const whoisData = await getDomainWhois(domain);
-    
-    // Get traffic data
-    const trafficData = await getTrafficEstimate(domain);
-    
-    // Generate keyword suggestions using ChatGPT
-    let suggestedKeywords: KeywordSuggestion[] = [];
-    try {
-      suggestedKeywords = await generateKeywordSuggestions(domain);
-    } catch (error) {
-      console.error('Failed to generate keyword suggestions:', error);
-      // Provide fallback suggestions based on domain name
-      const words = domain.split('.')[0].split(/[^a-zA-Z0-9]+/);
-      suggestedKeywords = words.map(word => ({
-        keyword: word,
-        searchVolume: 'Unknown',
-        difficulty: 'Medium'
-      }));
-    }
+    // Reset current stage for this domain
+    currentStages.delete(domain);
 
-    // Calculate confidence score
-    const confidenceScore = calculateConfidenceScore(whoisData, trafficData);
-    
-    // Calculate domain value
-    const estimatedValue = calculateDomainValue(domain, whoisData, trafficData);
+    // Sequential API calls with duplicate prevention
+    const whoisData = await runStageOnce(domain, 'whois', 
+      () => getDomainWhois(domain), 
+      onStageChange
+    );
+
+    const trafficData = await runStageOnce(domain, 'traffic',
+      () => getTrafficEstimate(domain),
+      onStageChange
+    );
+
+    // Get keywords before SEO analysis
+    const suggestedKeywords = await runStageOnce(domain, 'keywords',
+      () => generateKeywordSuggestions(domain),
+      onStageChange
+    );
+
+    const pageSpeedData = await runStageOnce(domain, 'seo',
+      () => getPageSpeedScore(domain),
+      onStageChange
+    );
+
+    // Valuation uses data from previous stages
+    const valuation = await runStageOnce(domain, 'valuation',
+      () => generateDomainValuation({
+        domain,
+        domainAge: whoisData.domainAge,
+        tld: domain.split('.').pop() || '',
+        monthlyTraffic: trafficData.monthlyVisits,
+        registrar: whoisData.registrar,
+        expiryDate: whoisData.expiryDate
+      }),
+      onStageChange
+    );
+
+    const duration = performance.now() - startTime;
+    console.log(`[Analysis] Completed in ${duration.toFixed(0)}ms`);
 
     return {
       domain,
-      estimatedValue,
-      confidenceScore,
+      estimatedValue: valuation.estimatedValue,
+      confidenceScore: valuation.confidenceScore,
       domainAge: whoisData.domainAge,
       monthlyTraffic: trafficData.monthlyVisits,
-      seoScore: Math.floor(Math.random() * 20) + 60, // Random score between 60-80
+      seoScore: pageSpeedData.score,
       tldValue: getTldValue(domain),
-      detailedAnalysis: generateDetailedAnalysis(domain, whoisData, trafficData),
-      suggestedKeywords: suggestedKeywords.slice(0, 5), // Limit to 5 suggestions
+      detailedAnalysis: valuation.detailedAnalysis,
+      suggestedKeywords: suggestedKeywords || [],
       debug: {
         whois: whoisData.debug,
-        traffic: trafficData.debug
+        traffic: trafficData.debug,
+        pageSpeed: pageSpeedData.debug,
+        timing: Math.round(duration)
       }
     };
   } catch (error) {
-    console.error('Domain analysis failed:', error);
+    const duration = performance.now() - startTime;
+    console.error(`[Analysis] Failed after ${duration.toFixed(0)}ms:`, error);
+    
+    // Clean up ongoing operations for this domain
+    ongoingOperations.delete(domain);
+    currentStages.delete(domain);
+    
     throw error;
   }
 }

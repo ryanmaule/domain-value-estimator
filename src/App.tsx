@@ -10,6 +10,7 @@ import TermsPage from './pages/TermsPage';
 import PrivacyPage from './pages/PrivacyPage';
 import ContactPage from './pages/ContactPage';
 import AboutPage from './pages/AboutPage';
+import TransactionsPage from './pages/TransactionsPage';
 
 function App() {
   const isDevMode = import.meta.env.VITE_DEV_MODE === 'true';
@@ -27,6 +28,7 @@ function App() {
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/account" element={<AccountPage />} />
+        <Route path="/transactions" element={<TransactionsPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/contact" element={<ContactPage />} />

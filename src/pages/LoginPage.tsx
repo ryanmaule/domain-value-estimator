@@ -4,9 +4,11 @@ import { Globe, Mail } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import Footer from '../components/Footer';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { useAuth } from '../contexts/AuthContext';
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -15,25 +17,8 @@ const LoginPage: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Login failed');
-      }
-
-      const data = await response.json();
-      
-      if (data.magicLink) {
-        toast.success('Check your email for the login link!');
-      } else {
-        toast.error('Email not found. Please check if you have an active subscription.');
-      }
+      await login(email);
+      navigate('/');
     } catch (error) {
       console.error('Login error:', error);
       toast.error('Login failed. Please try again.');

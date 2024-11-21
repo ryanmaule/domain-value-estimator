@@ -1,15 +1,12 @@
-import { parseISO, differenceInYears, differenceInMonths } from 'date-fns';
+import type { WhoisData } from '../types';
 
-export interface WhoisData {
-  domainAge: string;
-  creationDate: string | null;
-  expiryDate: string | null;
-  registrar: string | null;
-  isAvailable: boolean;
-  debug?: any;
-}
+const MAX_RETRIES = 1;
+const RETRY_DELAY = 2000;
 
-export async function getDomainWhois(domain: string): Promise<WhoisData> {
+async function fetchWithRetry(domain: string, retries = 0): Promise<WhoisData> {
+  const startTime = performance.now();
+  console.log(`[WHOIS] Starting lookup for ${domain}`);
+
   try {
     const response = await fetch(`https://who-dat.as93.net/${encodeURIComponent(domain)}`);
     
@@ -18,6 +15,8 @@ export async function getDomainWhois(domain: string): Promise<WhoisData> {
     }
 
     const data = await response.json();
+    const duration = performance.now() - startTime;
+    console.log(`[WHOIS] Lookup completed in ${duration.toFixed(0)}ms`);
 
     if (!data.domain?.created_date) {
       return {
@@ -26,15 +25,19 @@ export async function getDomainWhois(domain: string): Promise<WhoisData> {
         expiryDate: null,
         registrar: null,
         isAvailable: false,
-        debug: { error: 'No creation date found', data }
+        debug: { 
+          error: 'No creation date found', 
+          data,
+          timing: Math.round(duration)
+        }
       };
     }
 
     const creationDate = data.domain.created_date;
-    const createDate = parseISO(creationDate);
+    const createDate = new Date(creationDate);
     const now = new Date();
-    const years = differenceInYears(now, createDate);
-    const months = differenceInMonths(now, createDate) % 12;
+    const years = now.getFullYear() - createDate.getFullYear();
+    const months = now.getMonth() - createDate.getMonth();
     
     let domainAge = 'Unknown';
     if (years > 0) {
@@ -54,17 +57,35 @@ export async function getDomainWhois(domain: string): Promise<WhoisData> {
       expiryDate: data.domain.expiration_date || null,
       registrar: data.registrar?.name || null,
       isAvailable: false,
-      debug: { data }
+      debug: { 
+        data,
+        timing: Math.round(duration)
+      }
     };
   } catch (error) {
-    console.error('WHOIS lookup failed:', error);
+    const duration = performance.now() - startTime;
+    console.error(`[WHOIS] Lookup failed after ${duration.toFixed(0)}ms:`, error);
+
+    if (retries < MAX_RETRIES) {
+      console.log(`[WHOIS] Retrying in ${RETRY_DELAY}ms...`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      return fetchWithRetry(domain, retries + 1);
+    }
+
     return {
       domainAge: 'Unknown',
       creationDate: null,
       expiryDate: null,
       registrar: null,
       isAvailable: false,
-      debug: { error: error instanceof Error ? error.message : 'Unknown error' }
+      debug: { 
+        error,
+        timing: Math.round(duration)
+      }
     };
   }
+}
+
+export async function getDomainWhois(domain: string): Promise<WhoisData> {
+  return fetchWithRetry(domain);
 }

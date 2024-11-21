@@ -5,11 +5,11 @@ const Footer: React.FC = () => {
   return (
     <footer className="bg-white border-t border-gray-200 mt-auto">
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8">
-          <div className="space-y-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-8">
+          <div className="col-span-2 sm:col-span-3 lg:col-span-1">
             <h3 className="text-sm font-semibold text-gray-900 uppercase">About</h3>
-            <p className="text-sm text-gray-600">
-              Domain Value Estimator provides accurate domain appraisals using advanced AI technology.
+            <p className="mt-4 text-sm text-gray-600">
+              Domain Value provides accurate domain appraisals using advanced AI technology.
             </p>
           </div>
           
@@ -65,17 +65,17 @@ const Footer: React.FC = () => {
             <h3 className="text-sm font-semibold text-gray-900 uppercase mb-4">Connect</h3>
             <ul className="space-y-3">
               <li>
-                <a href="mailto:support@domainestimator.com" className="text-sm text-gray-600 hover:text-indigo-600">
-                  support@domainestimator.com
+                <a href="mailto:support@domainvalue.dev" className="text-sm text-gray-600 hover:text-indigo-600">
+                  support@domainvalue.dev
                 </a>
               </li>
             </ul>
           </div>
         </div>
-        
+
         <div className="mt-8 pt-8 border-t border-gray-200">
           <p className="text-sm text-gray-600 text-center">
-            © {new Date().getFullYear()} Domain Value Estimator. All rights reserved.
+            © {new Date().getFullYear()} Domain Value. All rights reserved.
           </p>
         </div>
       </div>

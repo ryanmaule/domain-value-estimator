@@ -54,11 +54,7 @@ export async function sendLoginEmail(email, magicLink) {
     await transporter?.sendMail(mailOptions);
     console.log('Login email sent successfully to:', email);
   } catch (error) {
-    console.error('Failed to send login email:', {
-      error: error.message,
-      stack: error.stack,
-      email
-    });
+    console.error('Failed to send login email:', error);
     throw error;
   }
 }
@@ -70,17 +66,13 @@ export async function verifyToken(token) {
     console.log('Token verified successfully:', decoded);
     return decoded;
   } catch (error) {
-    console.error('Token verification failed:', {
-      error: error.message,
-      stack: error.stack
-    });
+    console.error('Token verification failed:', error);
     return null;
   }
 }
 
 export async function createSession(email) {
   console.log('Creating session for:', email);
-  // In dev mode, create a session token with the email
   const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: '30d' });
   console.log('Session created:', { email, token });
   return token;
@@ -99,7 +91,6 @@ export async function validateSession(token) {
     
     if (DEV_MODE) {
       console.log('Dev mode: Returning pro user');
-      // In dev mode, always return a pro user
       return {
         id: 'dev-user',
         email: decoded.email,
@@ -108,18 +99,39 @@ export async function validateSession(token) {
     }
 
     console.log('Production mode: No validation implemented');
-    // Production validation would go here
     return null;
   } catch (error) {
-    console.error('Session validation error:', {
-      error: error.message,
-      stack: error.stack
-    });
+    console.error('Session validation error:', error);
     return null;
   }
 }
 
+export async function debugLogin(email) {
+  console.log('Attempting debug login:', { email, devMode: DEV_MODE });
+  
+  if (!DEV_MODE) {
+    console.error('Debug login attempted in production mode');
+    throw new Error('Debug login only available in development mode');
+  }
+
+  const user = {
+    id: 'dev-user',
+    email,
+    isPro: true
+  };
+
+  console.log('Dev user created:', user);
+  devUsers.set(email, user);
+  
+  return { user };
+}
+
 export function setAuthCookie(res, token) {
+  if (DEV_MODE) {
+    console.log('Dev mode: Skipping cookie setting');
+    return;
+  }
+
   console.log('Setting auth cookie with options:', {
     token: token ? 'present' : 'missing',
     cookieName: COOKIE_NAME,
@@ -135,26 +147,29 @@ export function setAuthCookie(res, token) {
 
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: !DEV_MODE, // Only require HTTPS in production
+    secure: !DEV_MODE,
     sameSite: 'lax',
-    maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+    maxAge: 30 * 24 * 60 * 60 * 1000
   });
   console.log('Auth cookie set successfully');
 }
 
 export function clearAuthCookie(res) {
+  if (DEV_MODE) {
+    console.log('Dev mode: Skipping cookie clearing');
+    return;
+  }
+
   console.log('Clearing auth cookie');
   res.clearCookie(COOKIE_NAME);
   console.log('Auth cookie cleared successfully');
 }
 
-// Middleware to check authentication
 export async function requireAuth(req, res, next) {
   console.log('Checking authentication');
   
   if (DEV_MODE) {
     console.log('Dev mode: Providing pro user');
-    // In dev mode, always provide a pro user
     req.user = { 
       id: 'dev-user',
       email: 'dev@example.com',
@@ -163,9 +178,9 @@ export async function requireAuth(req, res, next) {
     return next();
   }
 
+  const token = req.cookies[COOKIE_NAME];
   console.log('Found auth token:', !!token);
   
-  const token = req.cookies[COOKIE_NAME];
   const user = await validateSession(token);
   console.log('Validation result:', user);
 
@@ -174,34 +189,7 @@ export async function requireAuth(req, res, next) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
 
-  console.log('Authentication successful:', user);
   req.user = user;
+  console.log('Authentication successful:', user);
   next();
-}
-
-// Debug login for development
-export async function debugLogin(email) {
-  console.log('Attempting debug login:', { email, devMode: DEV_MODE });
-  
-  if (!DEV_MODE) {
-    console.error('Debug login attempted in production mode');
-    throw new Error('Debug login only available in development mode');
-  }
-
-  // Create a dev user with Pro status
-  const user = {
-    id: 'dev-user',
-    email,
-    isPro: true
-  };
-  console.log('Dev user created:', user);
-
-  // Store in memory for dev mode
-  devUsers.set(email, user);
-  
-  // Create a session token
-  const token = await createSession(email);
-  
-  console.log('Debug login successful:', { user, token });
-  return { user, token };
 }
