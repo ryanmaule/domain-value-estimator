@@ -54,7 +54,7 @@ if (!DEV_MODE) {
 
 app.use(express.json());
 
-// Security headers
+// Security headers with updated CSP
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -62,7 +62,16 @@ app.use(helmet({
       scriptSrc: ["'self'", "'unsafe-inline'", 'js.stripe.com'],
       styleSrc: ["'self'", "'unsafe-inline'", 'fonts.googleapis.com'],
       imgSrc: ["'self'", 'data:', 'https:', 'blob:'],
-      connectSrc: ["'self'", 'api.stripe.com', 'api.openai.com'],
+      connectSrc: [
+        "'self'", 
+        'api.stripe.com', 
+        'api.openai.com',
+        'who-dat.as93.net',
+        'www.googleapis.com',
+        'api.allorigins.win',
+        'api.similarweb.com',
+        'api.semrush.com'
+      ],
       frameSrc: ["'self'", 'js.stripe.com'],
       fontSrc: ["'self'", 'fonts.gstatic.com'],
       objectSrc: ["'none'"],
