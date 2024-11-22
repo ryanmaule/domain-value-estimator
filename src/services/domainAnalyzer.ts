@@ -4,6 +4,21 @@ import { generateKeywordSuggestions, generateDomainValuation } from './openaiSer
 import { getPageSpeedScore } from './pagespeedService';
 import type { DomainAnalysis, AnalysisStage } from '../types';
 
+interface AnalysisResult {
+  whois?: any;
+  traffic?: any;
+  keywords?: any;
+  seo?: any;
+  timing: number;
+}
+
+const MAX_RETRIES = 1;
+const RETRY_DELAY = 2000; // 2 seconds
+
+// Track ongoing analyses to prevent duplicates
+const ongoingAnalyses = new Map<string, Promise<any>>();
+
+// Helper function to get TLD value
 function getTldValue(domain: string): string {
   const tld = domain.split('.').pop()?.toLowerCase();
   const highValueTlds = ['com', 'ai', 'io'];
@@ -14,144 +29,142 @@ function getTldValue(domain: string): string {
   return `Standard (.${tld})`;
 }
 
-// Track ongoing operations to prevent duplicates
-const ongoingOperations = new Map<string, Map<AnalysisStage, Promise<any>>>();
-
-// Track current stage for each domain
-const currentStages = new Map<string, AnalysisStage>();
-
-// Updated stage order to put keywords before SEO
-const stageOrder: AnalysisStage[] = ['whois', 'traffic', 'keywords', 'seo', 'valuation'];
-
-async function runStageOnce<T>(
+// Helper function to run a stage with retry
+async function runStage<T>(
   domain: string,
-  stage: AnalysisStage,
-  operation: () => Promise<T>,
-  onStageChange?: (stage: AnalysisStage, retryCount?: number) => void
+  stageName: string,
+  action: () => Promise<T>
 ): Promise<T> {
-  // Get or create operations map for this domain
-  let domainOperations = ongoingOperations.get(domain);
-  if (!domainOperations) {
-    domainOperations = new Map();
-    ongoingOperations.set(domain, domainOperations);
-  }
-
-  // Check if operation is already in progress
-  let existingOperation = domainOperations.get(stage);
-  if (existingOperation) {
-    console.log(`[Analysis] Stage ${stage} already in progress for ${domain}, waiting...`);
-    return existingOperation;
-  }
-
-  // Only update stage if it's the next one in order
-  const currentStage = currentStages.get(domain);
-  const currentIndex = currentStage ? stageOrder.indexOf(currentStage) : -1;
-  const newIndex = stageOrder.indexOf(stage);
+  const key = `${domain}:${stageName}`;
   
-  if (!currentStage || newIndex > currentIndex) {
-    console.log(`[Analysis] Progressing to stage ${stage} for ${domain}`);
-    currentStages.set(domain, stage);
-    onStageChange?.(stage);
-  } else {
-    console.log(`[Analysis] Running stage ${stage} without updating progress (current: ${currentStage})`);
+  // Check if analysis is already running
+  if (ongoingAnalyses.has(key)) {
+    console.log(`[Analysis] Reusing existing ${stageName} analysis for ${domain}`);
+    return ongoingAnalyses.get(key);
   }
 
-  // Start new operation
-  console.log(`[Analysis] Starting stage ${stage} for ${domain}`);
-  
-  const operationPromise = operation().finally(() => {
-    // Clean up after operation completes
-    domainOperations?.delete(stage);
-    if (domainOperations?.size === 0) {
-      ongoingOperations.delete(domain);
-      currentStages.delete(domain);
+  const startTime = performance.now();
+  let retries = MAX_RETRIES;
+  let lastError: Error | null = null;
+
+  const analysisPromise = (async () => {
+    while (retries >= 0) {
+      try {
+        const result = await action();
+        console.log(`[Analysis] ${stageName} completed in ${(performance.now() - startTime).toFixed(0)}ms`);
+        return result;
+      } catch (error) {
+        lastError = error;
+        if (retries > 0) {
+          console.log(`[Analysis] ${stageName} failed, retrying in ${RETRY_DELAY}ms. Attempts remaining: ${retries}`);
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+          retries--;
+        } else {
+          console.error(`[Analysis] ${stageName} failed after all retries:`, error);
+          throw error;
+        }
+      }
     }
+    throw lastError;
+  })();
+
+  // Store the promise
+  ongoingAnalyses.set(key, analysisPromise);
+
+  // Clean up after completion
+  analysisPromise.finally(() => {
+    ongoingAnalyses.delete(key);
   });
 
-  // Store operation promise
-  domainOperations.set(stage, operationPromise);
-
-  return operationPromise;
+  return analysisPromise;
 }
 
 export async function analyzeDomain(
   domain: string,
-  onStageChange?: (stage: AnalysisStage, retryCount?: number) => void
+  onStageComplete?: (stage: AnalysisStage) => void
 ): Promise<DomainAnalysis> {
+  if (!domain) {
+    throw new Error('Domain is required');
+  }
+
   const startTime = performance.now();
   console.log(`[Analysis] Starting analysis for ${domain}`);
 
+  const results: AnalysisResult = {
+    timing: 0
+  };
+
   try {
-    if (!domain) {
-      throw new Error('Domain is required');
-    }
+    // Run initial analyses in parallel
+    const [whois, traffic, keywords, seo] = await Promise.all([
+      // WHOIS Analysis
+      runStage(domain, 'whois', () => getDomainWhois(domain))
+        .then(result => {
+          onStageComplete?.('whois');
+          return result;
+        }),
 
-    // Reset current stage for this domain
-    currentStages.delete(domain);
+      // Traffic Analysis
+      runStage(domain, 'traffic', () => getTrafficEstimate(domain))
+        .then(result => {
+          onStageComplete?.('traffic');
+          return result;
+        }),
 
-    // Sequential API calls with duplicate prevention
-    const whoisData = await runStageOnce(domain, 'whois', 
-      () => getDomainWhois(domain), 
-      onStageChange
-    );
+      // Keyword Analysis
+      runStage(domain, 'keywords', () => generateKeywordSuggestions(domain))
+        .then(result => {
+          onStageComplete?.('keywords');
+          return result;
+        }),
 
-    const trafficData = await runStageOnce(domain, 'traffic',
-      () => getTrafficEstimate(domain),
-      onStageChange
-    );
+      // SEO Analysis
+      runStage(domain, 'seo', () => getPageSpeedScore(domain))
+        .then(result => {
+          onStageComplete?.('seo');
+          return result;
+        })
+    ]);
 
-    // Get keywords before SEO analysis
-    const suggestedKeywords = await runStageOnce(domain, 'keywords',
-      () => generateKeywordSuggestions(domain),
-      onStageChange
-    );
+    // Store results
+    results.whois = whois;
+    results.traffic = traffic;
+    results.keywords = keywords;
+    results.seo = seo;
 
-    const pageSpeedData = await runStageOnce(domain, 'seo',
-      () => getPageSpeedScore(domain),
-      onStageChange
-    );
+    // Run valuation with collected data
+    const valuation = await generateDomainValuation({
+      domain,
+      domainAge: whois?.domainAge || 'Unknown',
+      tld: domain.split('.').pop() || '',
+      monthlyTraffic: traffic?.monthlyVisits || 'Unknown',
+      registrar: whois?.registrar || null,
+      expiryDate: whois?.expiryDate || null
+    });
 
-    // Valuation uses data from previous stages
-    const valuation = await runStageOnce(domain, 'valuation',
-      () => generateDomainValuation({
-        domain,
-        domainAge: whoisData.domainAge,
-        tld: domain.split('.').pop() || '',
-        monthlyTraffic: trafficData.monthlyVisits,
-        registrar: whoisData.registrar,
-        expiryDate: whoisData.expiryDate
-      }),
-      onStageChange
-    );
+    onStageComplete?.('valuation');
 
-    const duration = performance.now() - startTime;
-    console.log(`[Analysis] Completed in ${duration.toFixed(0)}ms`);
+    results.timing = Math.round(performance.now() - startTime);
 
     return {
       domain,
       estimatedValue: valuation.estimatedValue,
       confidenceScore: valuation.confidenceScore,
-      domainAge: whoisData.domainAge,
-      monthlyTraffic: trafficData.monthlyVisits,
-      seoScore: pageSpeedData.score,
+      domainAge: whois?.domainAge || 'Unknown',
+      monthlyTraffic: traffic?.monthlyVisits || 'Unknown',
+      seoScore: seo?.score || 50,
       tldValue: getTldValue(domain),
       detailedAnalysis: valuation.detailedAnalysis,
-      suggestedKeywords: suggestedKeywords || [],
+      suggestedKeywords: keywords || [],
       debug: {
-        whois: whoisData.debug,
-        traffic: trafficData.debug,
-        pageSpeed: pageSpeedData.debug,
-        timing: Math.round(duration)
+        whois: whois?.debug,
+        traffic: traffic?.debug,
+        seo: seo?.debug,
+        timing: results.timing
       }
     };
   } catch (error) {
-    const duration = performance.now() - startTime;
-    console.error(`[Analysis] Failed after ${duration.toFixed(0)}ms:`, error);
-    
-    // Clean up ongoing operations for this domain
-    ongoingOperations.delete(domain);
-    currentStages.delete(domain);
-    
+    console.error('[Analysis] Analysis failed:', error);
     throw error;
   }
 }

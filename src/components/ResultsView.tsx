@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import { RotateCcw, Download, TrendingUp, Globe, Clock, Search, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { usePDF } from 'react-to-pdf';
@@ -16,22 +16,22 @@ const ResultsView: React.FC<Props> = ({ analysis, onReset }) => {
   const { toPDF, targetRef } = usePDF({filename: `${analysis.domain}-valuation.pdf`});
   const navigate = useNavigate();
   const isPro = true; // Pro users can always export PDF
-  const openaiDebug = getLastDebugResponse();
   const showDebug = import.meta.env.VITE_SHOW_DEBUG === 'true';
-  
-  // Store analysis in state to prevent unwanted re-renders
-  const [currentAnalysis, setCurrentAnalysis] = useState(analysis);
+  const openaiDebug = getLastDebugResponse();
 
-  // Only update analysis when it actually changes
-  useEffect(() => {
-    if (JSON.stringify(analysis) !== JSON.stringify(currentAnalysis)) {
-      console.log('[ResultsView] Analysis updated:', {
-        old: currentAnalysis,
-        new: analysis
-      });
-      setCurrentAnalysis(analysis);
-    }
-  }, [analysis]);
+  // Use memo to prevent unnecessary re-renders
+  const memoizedAnalysis = useMemo(() => ({
+    domain: analysis.domain,
+    estimatedValue: analysis.estimatedValue,
+    confidenceScore: analysis.confidenceScore,
+    domainAge: analysis.domainAge,
+    monthlyTraffic: analysis.monthlyTraffic,
+    seoScore: analysis.seoScore,
+    tldValue: analysis.tldValue,
+    detailedAnalysis: analysis.detailedAnalysis,
+    suggestedKeywords: analysis.suggestedKeywords,
+    debug: analysis.debug
+  }), [analysis]);
 
   const handleDownloadPDF = () => {
     if (isPro) {
@@ -47,7 +47,7 @@ const ResultsView: React.FC<Props> = ({ analysis, onReset }) => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
           <h2 className="text-xl sm:text-3xl font-bold text-gray-900">Domain Analysis Results</h2>
-          <h1 className="text-2xl sm:text-4xl font-bold text-indigo-600 mt-2">{currentAnalysis.domain}</h1>
+          <h1 className="text-2xl sm:text-4xl font-bold text-indigo-600 mt-2">{memoizedAnalysis.domain}</h1>
         </div>
         <div className="flex space-x-4">
           <button
@@ -71,11 +71,11 @@ const ResultsView: React.FC<Props> = ({ analysis, onReset }) => {
         <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl p-4 sm:p-6 text-white">
           <h3 className="text-lg sm:text-xl font-semibold mb-2">Estimated Value</h3>
           <div className="text-3xl sm:text-4xl font-bold">
-            {currentAnalysis.estimatedValue ? `$${currentAnalysis.estimatedValue.toLocaleString()}` : '—'}
+            {memoizedAnalysis.estimatedValue ? `$${memoizedAnalysis.estimatedValue.toLocaleString()}` : '—'}
           </div>
           <div className="mt-4 flex items-center space-x-2">
             <div className="text-indigo-200">Confidence Score:</div>
-            <div className="font-semibold">{currentAnalysis.confidenceScore}%</div>
+            <div className="font-semibold">{memoizedAnalysis.confidenceScore}%</div>
           </div>
           <div className="mt-3 text-xs text-indigo-100">
             * This is an AI-generated estimate based on multiple factors including domain age, 
@@ -88,24 +88,24 @@ const ResultsView: React.FC<Props> = ({ analysis, onReset }) => {
             {
               icon: <Globe className="h-6 w-6 text-indigo-600" />,
               label: "Domain Age",
-              value: currentAnalysis.domainAge
+              value: memoizedAnalysis.domainAge
             },
             {
               icon: <TrendingUp className="h-6 w-6 text-indigo-600" />,
               label: "Monthly Traffic",
-              value: typeof currentAnalysis.monthlyTraffic === 'number' 
-                ? currentAnalysis.monthlyTraffic.toLocaleString()
-                : currentAnalysis.monthlyTraffic
+              value: typeof memoizedAnalysis.monthlyTraffic === 'number' 
+                ? memoizedAnalysis.monthlyTraffic.toLocaleString()
+                : memoizedAnalysis.monthlyTraffic
             },
             {
               icon: <Search className="h-6 w-6 text-indigo-600" />,
               label: "SEO Score",
-              value: `${currentAnalysis.seoScore}/100`
+              value: `${memoizedAnalysis.seoScore}/100`
             },
             {
               icon: <Clock className="h-6 w-6 text-indigo-600" />,
               label: "TLD Value",
-              value: currentAnalysis.tldValue
+              value: memoizedAnalysis.tldValue
             }
           ].map((stat, index) => (
             <div key={index} className="bg-gray-50 rounded-lg p-4">
@@ -123,7 +123,7 @@ const ResultsView: React.FC<Props> = ({ analysis, onReset }) => {
         <div>
           <h3 className="text-lg sm:text-xl font-semibold mb-4">Suggested Keywords</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {currentAnalysis.suggestedKeywords.map((keyword, index) => (
+            {memoizedAnalysis.suggestedKeywords.map((keyword, index) => (
               <div key={index} className="bg-gray-50 rounded-lg p-4">
                 <div className="font-medium text-gray-900">{keyword.keyword}</div>
                 <div className="text-sm text-gray-600">
@@ -139,7 +139,7 @@ const ResultsView: React.FC<Props> = ({ analysis, onReset }) => {
         <div>
           <h3 className="text-lg sm:text-xl font-semibold mb-4">Detailed Analysis</h3>
           <div className="bg-gray-50 rounded-lg p-4 sm:p-6">
-            <p className="text-gray-700 whitespace-pre-line">{currentAnalysis.detailedAnalysis}</p>
+            <p className="text-gray-700 whitespace-pre-line">{memoizedAnalysis.detailedAnalysis}</p>
           </div>
         </div>
 
@@ -147,8 +147,8 @@ const ResultsView: React.FC<Props> = ({ analysis, onReset }) => {
           <DebugBox title="OpenAI Debug Info" data={openaiDebug} />
         )}
 
-        {showDebug && currentAnalysis.debug && (
-          <DebugBox title="API Debug Info" data={currentAnalysis.debug} />
+        {showDebug && memoizedAnalysis.debug && (
+          <DebugBox title="API Debug Info" data={memoizedAnalysis.debug} />
         )}
       </div>
     </div>

@@ -2,8 +2,6 @@ import type { PageSpeedResult } from '../types';
 
 const API_KEY = import.meta.env.VITE_PAGESPEED_API_KEY;
 const API_URL = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed';
-
-// Proxy URL to avoid CORS issues
 const PROXY_URL = 'https://api.allorigins.win/raw?url=';
 
 export async function getPageSpeedScore(domain: string): Promise<PageSpeedResult> {
@@ -11,7 +9,6 @@ export async function getPageSpeedScore(domain: string): Promise<PageSpeedResult
   console.log(`[PageSpeed] Starting analysis for ${domain}`);
 
   try {
-    // Only request performance category and minimal fields for mobile only
     const params = new URLSearchParams({
       url: `https://${domain}`,
       key: API_KEY,
@@ -36,9 +33,15 @@ export async function getPageSpeedScore(domain: string): Promise<PageSpeedResult
           'Accept': 'application/json'
         },
         signal: controller.signal
+      }).catch(error => {
+        // Silently handle abort errors
+        if (error.name === 'AbortError') {
+          return null;
+        }
+        throw error;
       });
       
-      if (!response.ok) {
+      if (!response?.ok) {
         throw new Error('Direct API call failed');
       }
 
@@ -49,7 +52,6 @@ export async function getPageSpeedScore(domain: string): Promise<PageSpeedResult
         throw new Error('No performance score in response');
       }
 
-      // Extract score
       const mobileScore = data.lighthouseResult.categories.performance.score;
       const score = Math.round(mobileScore * 100);
 
@@ -59,7 +61,7 @@ export async function getPageSpeedScore(domain: string): Promise<PageSpeedResult
       return {
         score: score,
         mobileScore: score,
-        desktopScore: score, // Use mobile score for both since we're only testing mobile
+        desktopScore: score,
         debug: {
           data,
           timing: {
@@ -69,18 +71,27 @@ export async function getPageSpeedScore(domain: string): Promise<PageSpeedResult
         }
       };
     } catch (directError) {
-      console.log('[PageSpeed] Direct API call failed, trying proxy:', directError);
+      // Only log if it's not an abort error
+      if (directError.name !== 'AbortError') {
+        console.log('[PageSpeed] Direct API call failed, trying proxy:', directError);
+      }
 
-      // If direct call fails, try through proxy
+      // Try through proxy
       const proxyResponse = await fetch(proxyUrl, {
         headers: {
           'Accept': 'application/json'
         },
         signal: controller.signal
+      }).catch(error => {
+        // Silently handle abort errors
+        if (error.name === 'AbortError') {
+          return null;
+        }
+        throw error;
       });
 
-      if (!proxyResponse.ok) {
-        throw new Error(`Proxy API call failed: ${proxyResponse.status}`);
+      if (!proxyResponse?.ok) {
+        throw new Error(`Proxy API call failed: ${proxyResponse?.status}`);
       }
 
       const proxyData = await proxyResponse.json();
@@ -90,7 +101,6 @@ export async function getPageSpeedScore(domain: string): Promise<PageSpeedResult
         throw new Error('No performance score in proxy response');
       }
 
-      // Extract score from proxy response
       const proxyMobileScore = proxyData.lighthouseResult.categories.performance.score;
       const proxyScore = Math.round(proxyMobileScore * 100);
 
@@ -112,12 +122,11 @@ export async function getPageSpeedScore(domain: string): Promise<PageSpeedResult
     }
   } catch (error) {
     const duration = performance.now() - startTime;
-    console.error(`[PageSpeed] Analysis failed after ${duration.toFixed(0)}ms:`, {
-      error: error.message || error,
-      name: error.name,
-      stack: error.stack,
-      domain
-    });
+    
+    // Only log non-abort errors
+    if (error.name !== 'AbortError') {
+      console.log(`[PageSpeed] Analysis failed after ${duration.toFixed(0)}ms, using default score`);
+    }
 
     // Return a default score on error
     const defaultScore = 50;
@@ -127,11 +136,7 @@ export async function getPageSpeedScore(domain: string): Promise<PageSpeedResult
       mobileScore: defaultScore,
       desktopScore: defaultScore,
       debug: { 
-        error: {
-          message: error.message || 'Unknown error',
-          name: error.name,
-          stack: error.stack
-        },
+        error: error.name === 'AbortError' ? 'timeout' : error.message,
         timing: {
           total: Math.round(duration)
         }

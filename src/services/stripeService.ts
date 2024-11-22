@@ -25,28 +25,23 @@ export interface ApiResponse<T> {
   timing?: number;
 }
 
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
+let stripePromise: Promise<any> | null = null;
+
+// Lazy loading of Stripe
+function getStripe() {
+  if (!stripePromise) {
+    const key = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+    if (!key) {
+      console.warn('Stripe publishable key missing');
+      return null;
+    }
+    stripePromise = loadStripe(key);
+  }
+  return stripePromise;
+}
+
 const appUrl = import.meta.env.VITE_APP_URL || window.location.origin;
 const DEV_MODE = import.meta.env.VITE_DEV_MODE === 'true';
-
-console.log('Stripe initialization:', {
-  hasPublishableKey: !!import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY,
-  hasSecretKey: !!import.meta.env.VITE_STRIPE_SECRET_KEY,
-  hasPriceId: !!import.meta.env.VITE_STRIPE_PRICE_ID,
-  hasWebhookSecret: !!import.meta.env.VITE_STRIPE_WEBHOOK_SECRET,
-  isDev: DEV_MODE,
-  mode: import.meta.env.MODE
-});
-
-interface CheckoutRequestBody {
-  successUrl: string;
-  cancelUrl: string;
-}
-
-interface CheckoutResponse {
-  sessionId: string;
-  timing?: number;
-}
 
 export async function redirectToCheckout(): Promise<void> {
   const startTime = performance.now();
@@ -59,22 +54,20 @@ export async function redirectToCheckout(): Promise<void> {
   }
 
   try {
-    const stripe = await stripePromise;
+    const stripe = await getStripe();
     if (!stripe) {
       throw new Error('Failed to initialize payment system');
     }
-
-    const requestBody: CheckoutRequestBody = {
-      successUrl: `${appUrl}/account?success=true`,
-      cancelUrl: `${appUrl}/pricing?canceled=true`,
-    };
 
     const response = await fetch('/api/stripe/create-checkout-session', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(requestBody),
+      body: JSON.stringify({
+        successUrl: `${appUrl}/account?success=true`,
+        cancelUrl: `${appUrl}/pricing?canceled=true`,
+      }),
     });
 
     if (!response.ok) {
@@ -82,7 +75,7 @@ export async function redirectToCheckout(): Promise<void> {
       throw new Error(errorData.message || 'Failed to create checkout session');
     }
 
-    const { sessionId } = await response.json() as CheckoutResponse;
+    const { sessionId } = await response.json();
     if (!sessionId) {
       throw new Error('Invalid response: missing session ID');
     }
@@ -209,7 +202,6 @@ export async function cancelSubscription(): Promise<boolean> {
   }
 }
 
-// Create a default export object with all the functions
 const stripeService = {
   redirectToCheckout,
   getSubscriptionDetails,

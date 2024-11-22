@@ -10,8 +10,7 @@ import BulkSearchNav from '../components/BulkSearchNav';
 import { analyzeDomain } from '../services/domainAnalyzer';
 import { validateDomain } from '../utils/validation';
 import { useAuth } from '../contexts/AuthContext';
-import type { DomainAnalysis } from '../types';
-import type { AnalysisStage } from '../components/LoadingProgress';
+import type { DomainAnalysis, AnalysisStage } from '../types';
 
 const ResultsPage: React.FC = () => {
   const { domain } = useParams();
@@ -20,8 +19,11 @@ const ResultsPage: React.FC = () => {
   const { decrementSearches } = useAuth();
   const [analysis, setAnalysis] = useState<DomainAnalysis | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [loadingStage, setLoadingStage] = useState<AnalysisStage>('whois');
+  const [completedStages, setCompletedStages] = useState<Set<AnalysisStage>>(new Set());
   const [bulkDomains, setBulkDomains] = useState<string[]>([]);
+
+  // Calculate progress based on completed stages
+  const progress = (completedStages.size / 5) * 100;
 
   // Get bulk domains from location state
   useEffect(() => {
@@ -44,7 +46,12 @@ const ResultsPage: React.FC = () => {
 
     try {
       setIsLoading(true);
-      const result = await analyzeDomain(validDomain, setLoadingStage);
+      setCompletedStages(new Set());
+      
+      const result = await analyzeDomain(validDomain, (stage) => {
+        setCompletedStages(prev => new Set([...prev, stage]));
+      });
+      
       setAnalysis(result);
       decrementSearches();
     } catch (error) {
@@ -92,7 +99,11 @@ const ResultsPage: React.FC = () => {
           </div>
         </header>
         <div className="flex-1 flex items-center justify-center">
-          <LoadingProgress domain={domain || ''} stage={loadingStage} />
+          <LoadingProgress 
+            domain={domain || ''} 
+            completedStages={completedStages}
+            progress={progress}
+          />
         </div>
         <Footer />
       </div>
