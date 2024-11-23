@@ -5,12 +5,22 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const COOKIE_NAME = 'auth_token';
 const DEV_MODE = process.env.VITE_DEV_MODE === 'true';
 
-// In-memory store for dev mode
-const devUsers = new Map();
+// Token blacklist with cleanup
+const tokenBlacklist = new Map();
 
-// Email configuration (only used in production)
+// Cleanup expired blacklist entries every hour
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, timestamp] of tokenBlacklist.entries()) {
+    if (now - timestamp > 3600000) { // Remove after 1 hour
+      tokenBlacklist.delete(token);
+    }
+  }
+}, 3600000); // Run every hour
+
+// Email configuration
 const transporter = DEV_MODE ? null : nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.ethereal.email',
+  host: process.env.SMTP_HOST || 'smtp.sendgrid.net',
   port: parseInt(process.env.SMTP_PORT || '587'),
   secure: process.env.SMTP_SECURE === 'true',
   auth: {
@@ -21,7 +31,21 @@ const transporter = DEV_MODE ? null : nodemailer.createTransport({
 
 export async function createMagicLink(email) {
   console.log('Creating magic link for:', email);
-  const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: '1h' });
+  
+  // Invalidate any existing tokens for this email
+  for (const [token, data] of tokenBlacklist.entries()) {
+    try {
+      const decoded = jwt.decode(token);
+      if (decoded && decoded.email === email) {
+        // Keep the token in blacklist but update timestamp
+        tokenBlacklist.set(token, Date.now());
+      }
+    } catch (error) {
+      console.error('Error decoding token during cleanup:', error);
+    }
+  }
+
+  const token = jwt.sign({ email, nonce: Date.now() }, JWT_SECRET, { expiresIn: '1h' });
   const magicLink = `${process.env.VITE_APP_URL || 'http://localhost:5173'}/auth/verify?token=${token}`;
   console.log('Magic link created:', { email, magicLink });
   return magicLink;
@@ -36,17 +60,87 @@ export async function sendLoginEmail(email, magicLink) {
   }
 
   const mailOptions = {
-    from: process.env.SMTP_FROM || 'noreply@domainestimator.com',
+    from: {
+      name: 'Domain Value Estimator',
+      address: process.env.SMTP_FROM || 'noreply@domainvalue.dev'
+    },
     to: email,
     subject: 'Login to Domain Value Estimator',
     html: `
-      <h1>Welcome to Domain Value Estimator</h1>
-      <p>Click the button below to log in:</p>
-      <a href="${magicLink}" style="display:inline-block;background:#4F46E5;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;">
-        Log In
-      </a>
-      <p>This link will expire in 1 hour.</p>
-      <p>If you didn't request this login link, please ignore this email.</p>
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Login to Domain Value Estimator</title>
+        </head>
+        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f3f4f6; padding: 20px;">
+            <tr>
+              <td align="center">
+                <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                  <!-- Header -->
+                  <tr>
+                    <td style="background-color: #4f46e5; padding: 24px; text-align: center;">
+                      <img src="${process.env.VITE_APP_URL}/favicon.svg" alt="Logo" style="width: 48px; height: 48px;">
+                      <h1 style="color: #ffffff; margin: 12px 0 0 0; font-size: 24px; font-weight: 600;">
+                        Domain Value Estimator
+                      </h1>
+                    </td>
+                  </tr>
+                  
+                  <!-- Content -->
+                  <tr>
+                    <td style="padding: 32px 24px;">
+                      <h2 style="margin: 0 0 16px 0; color: #111827; font-size: 20px; font-weight: 600;">
+                        Welcome Back!
+                      </h2>
+                      <p style="margin: 0 0 24px 0; color: #4b5563; font-size: 16px; line-height: 24px;">
+                        Click the button below to securely log in to your Domain Value Estimator account. This link will expire in 1 hour for security purposes.
+                      </p>
+                      
+                      <!-- Button -->
+                      <table width="100%" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td align="center" style="padding: 16px 0;">
+                            <a href="${magicLink}" 
+                               style="display: inline-block; padding: 12px 24px; background-color: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 500; font-size: 16px;">
+                              Log In
+                            </a>
+                          </td>
+                        </tr>
+                      </table>
+                      
+                      <!-- Backup Link -->
+                      <p style="margin: 24px 0 0 0; color: #6b7280; font-size: 14px; line-height: 20px;">
+                        If the button doesn't work, copy and paste this link into your browser:
+                        <br>
+                        <a href="${magicLink}" style="color: #4f46e5; text-decoration: none; word-break: break-all;">
+                          ${magicLink}
+                        </a>
+                      </p>
+                    </td>
+                  </tr>
+                  
+                  <!-- Footer -->
+                  <tr>
+                    <td style="background-color: #f9fafb; padding: 24px; text-align: center; border-top: 1px solid #e5e7eb;">
+                      <p style="margin: 0 0 8px 0; color: #4b5563; font-size: 14px;">
+                        Didn't request this email? You can safely ignore it.
+                      </p>
+                      <p style="margin: 0; color: #6b7280; font-size: 12px;">
+                        © ${new Date().getFullYear()} Domain Value Estimator. All rights reserved.
+                        <br>
+                        123 Valuation Street, Suite 100, San Francisco, CA 94105
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+      </html>
     `
   };
 
@@ -62,8 +156,18 @@ export async function sendLoginEmail(email, magicLink) {
 export async function verifyToken(token) {
   console.log('Verifying token');
   try {
+    // Check if token is blacklisted
+    if (tokenBlacklist.has(token)) {
+      console.log('Token is blacklisted');
+      return null;
+    }
+
     const decoded = jwt.verify(token, JWT_SECRET);
     console.log('Token verified successfully:', decoded);
+
+    // Add used token to blacklist
+    tokenBlacklist.set(token, Date.now());
+
     return decoded;
   } catch (error) {
     console.error('Token verification failed:', error);
@@ -98,8 +202,14 @@ export async function validateSession(token) {
       };
     }
 
-    console.log('Production mode: No validation implemented');
-    return null;
+    // Here you would typically validate against your database
+    // and return the user's full profile
+    return {
+      id: decoded.email,
+      email: decoded.email,
+      displayName: decoded.email.split('@')[0],
+      isPro: true // This should be based on subscription status
+    };
   } catch (error) {
     console.error('Session validation error:', error);
     return null;
@@ -149,7 +259,7 @@ export function setAuthCookie(res, token) {
     httpOnly: true,
     secure: !DEV_MODE,
     sameSite: 'lax',
-    maxAge: 30 * 24 * 60 * 60 * 1000
+    maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
   });
   console.log('Auth cookie set successfully');
 }

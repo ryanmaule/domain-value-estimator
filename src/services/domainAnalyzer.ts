@@ -133,16 +133,31 @@ export async function analyzeDomain(
     results.seo = seo;
 
     // Run valuation with collected data
-    const valuation = await generateDomainValuation({
-      domain,
-      domainAge: whois?.domainAge || 'Unknown',
-      tld: domain.split('.').pop() || '',
-      monthlyTraffic: traffic?.monthlyVisits || 'Unknown',
-      registrar: whois?.registrar || null,
-      expiryDate: whois?.expiryDate || null
-    });
+    const valuationKey = `${domain}:valuation`;
+    let valuation;
 
-    onStageComplete?.('valuation');
+    // Check if a valuation is already in progress
+    if (ongoingAnalyses.has(valuationKey)) {
+      console.log(`[Analysis] Reusing existing valuation for ${domain}`);
+      valuation = await ongoingAnalyses.get(valuationKey);
+    } else {
+      // Start new valuation
+      const valuationPromise = runStage(domain, 'valuation', () => 
+        generateDomainValuation({
+          domain,
+          domainAge: whois?.domainAge || 'Unknown',
+          tld: domain.split('.').pop() || '',
+          monthlyTraffic: traffic?.monthlyVisits || 'Unknown',
+          registrar: whois?.registrar || null,
+          expiryDate: whois?.expiryDate || null
+        })
+      ).then(result => {
+        onStageComplete?.('valuation');
+        return result;
+      });
+
+      valuation = await valuationPromise;
+    }
 
     results.timing = Math.round(performance.now() - startTime);
 

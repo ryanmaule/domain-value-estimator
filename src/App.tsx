@@ -6,6 +6,7 @@ import ResultsPage from './pages/ResultsPage';
 import PricingPage from './pages/PricingPage';
 import AccountPage from './pages/AccountPage';
 import LoginPage from './pages/LoginPage';
+import MagicLinkConfirmation from './pages/MagicLinkConfirmation';
 import TermsPage from './pages/TermsPage';
 import PrivacyPage from './pages/PrivacyPage';
 import ContactPage from './pages/ContactPage';
@@ -27,6 +28,7 @@ function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/magic-link-confirmation" element={<MagicLinkConfirmation />} />
         <Route path="/account" element={<AccountPage />} />
         <Route path="/transactions" element={<TransactionsPage />} />
         <Route path="/terms" element={<TermsPage />} />

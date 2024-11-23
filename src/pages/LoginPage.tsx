@@ -14,11 +14,27 @@ const LoginPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (isLoading) {
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      await login(email);
-      navigate('/');
+      console.log('Attempting login for:', email);
+      const result = await login(email);
+      
+      if (result.magicLinkSent) {
+        // Store email for confirmation page
+        sessionStorage.setItem('pendingLoginEmail', email);
+        navigate('/magic-link-confirmation');
+        toast.success('Check your email for the login link!');
+      } else if (result.user) {
+        // Direct login in dev mode
+        navigate('/');
+        toast.success('Successfully logged in');
+      }
     } catch (error) {
       console.error('Login error:', error);
       toast.error('Login failed. Please try again.');
@@ -37,7 +53,7 @@ const LoginPage: React.FC = () => {
               onClick={() => navigate('/')}
             >
               <Globe className="h-8 w-8 text-indigo-600" />
-              <h1 className="text-2xl font-bold text-gray-900">Domain Value Estimator</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Domain Value</h1>
             </div>
           </div>
         </div>
@@ -77,7 +93,7 @@ const LoginPage: React.FC = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
                 <LoadingSpinner size="small" />
