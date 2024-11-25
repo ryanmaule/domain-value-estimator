@@ -5,6 +5,8 @@ import helmet from 'helmet';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import authRoutes from './routes/auth.js';
+import stripeRoutes from './routes/stripe.js';
+import subscriptionRoutes from './routes/subscription.js';
 import 'dotenv/config';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -41,15 +43,22 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(cookieParser());
-app.use(express.json());
+
+// Parse JSON bodies for API requests
+app.use('/api', express.json());
+
+// Parse raw bodies for Stripe webhooks
+app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Auth routes
+// API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/stripe', stripeRoutes);
+app.use('/api/subscription', subscriptionRoutes);
 
 // Serve static files in production
 if (isProduction) {
