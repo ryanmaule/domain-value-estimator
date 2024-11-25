@@ -2,12 +2,16 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import helmet from 'helmet';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import authRoutes from './routes/auth.js';
 import 'dotenv/config';
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 const port = process.env.PORT || 3001;
 const isWebContainer = process.env.VITE_WEBCONTAINER === 'true';
+const isProduction = process.env.NODE_ENV === 'production';
 
 // Custom logging middleware
 app.use((req, res, next) => {
@@ -46,6 +50,21 @@ app.get('/api/health', (req, res) => {
 
 // Auth routes
 app.use('/api/auth', authRoutes);
+
+// Serve static files in production
+if (isProduction) {
+  // Serve static files from the dist directory
+  app.use(express.static(join(__dirname, '../dist')));
+
+  // Serve index.html for all other routes to support client-side routing
+  app.get('*', (req, res) => {
+    // Don't serve index.html for API routes
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ message: 'Not found' });
+    }
+    res.sendFile(join(__dirname, '../dist/index.html'));
+  });
+}
 
 // Error handling
 app.use((err, req, res, next) => {

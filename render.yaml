@@ -3,7 +3,7 @@ services:
     name: domain-value-estimator
     env: node
     buildCommand: npm install && npm run build
-    startCommand: node api/server.js
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
