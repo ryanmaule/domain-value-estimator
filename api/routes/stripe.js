@@ -38,9 +38,6 @@ router.post('/create-checkout-session', requireAuth, async (req, res) => {
   }
 });
 
-// Webhook endpoint
-router.post('/webhook', express.raw({ type: 'application/json' }), handleWebhook);
-
 // Get subscription details
 router.get('/subscription', requireAuth, async (req, res) => {
   try {
@@ -100,5 +97,8 @@ router.post('/subscription/cancel', requireAuth, async (req, res) => {
     res.status(500).json({ message: 'Failed to cancel subscription' });
   }
 });
+
+// Webhook endpoint
+router.post('/webhook', express.raw({ type: 'application/json' }), handleWebhook);
 
 export default router;

@@ -9,11 +9,11 @@ import stripeRoutes from './routes/stripe.js';
 import subscriptionRoutes from './routes/subscription.js';
 import 'dotenv/config';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 const port = process.env.PORT || 3001;
 const isWebContainer = process.env.VITE_WEBCONTAINER === 'true';
 const isProduction = process.env.NODE_ENV === 'production';
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Custom logging middleware
 app.use((req, res, next) => {

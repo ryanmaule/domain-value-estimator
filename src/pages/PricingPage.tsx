@@ -50,7 +50,7 @@ const PricingPage: React.FC = () => {
               onClick={() => navigate('/')}
             >
               <Globe className="h-8 w-8 text-indigo-600" />
-              <h1 className="text-2xl font-bold text-gray-900">Domain Value Estimator</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Domain Value</h1>
             </div>
           </div>
         </div>
@@ -131,8 +131,8 @@ const PricingPage: React.FC = () => {
         <div className="mt-12 text-center">
           <p className="text-gray-600">
             Questions? Contact our sales team at{' '}
-            <a href="mailto:sales@domainestimator.com" className="text-indigo-600 hover:text-indigo-500">
-              sales@domainestimator.com
+            <a href="mailto:sales@domainvalue.dev" className="text-indigo-600 hover:text-indigo-500">
+              sales@domainvalue.dev
             </a>
           </p>
         </div>

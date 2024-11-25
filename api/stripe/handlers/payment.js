@@ -1,5 +1,5 @@
 import db from '../../db/index.js';
-import { sendPaymentFailedEmail } from '../../email/templates.js';
+import { sendPaymentFailedEmail } from '../email/templates.js';
 
 export async function handlePaymentSucceeded(invoice) {
   const trx = await db.transaction();
