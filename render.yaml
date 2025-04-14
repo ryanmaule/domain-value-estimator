@@ -4,6 +4,7 @@ services:
     env: node
     buildCommand: npm install && npm run build
     startCommand: npm start
+    rootDir: .  # Added this line to explicitly set the root directory
     envVars:
       - key: NODE_ENV
         value: production
