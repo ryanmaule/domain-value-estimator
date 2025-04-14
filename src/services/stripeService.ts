@@ -59,14 +59,19 @@ export async function redirectToCheckout(): Promise<void> {
       throw new Error('Failed to initialize payment system');
     }
 
+    const successUrl = `${appUrl}/account?success=true`;
+    const cancelUrl = `${appUrl}/pricing?canceled=true`;
+
+    console.log('[Stripe - Frontend] Creating checkout session:', { successUrl, cancelUrl }); // Added logging
+
     const response = await fetch('/api/stripe/create-checkout-session', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        successUrl: `${appUrl}/account?success=true`,
-        cancelUrl: `${appUrl}/pricing?canceled=true`,
+        successUrl,
+        cancelUrl,
       }),
     });
 
