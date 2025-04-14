@@ -47,17 +47,9 @@ app.use(cookieParser());
 // Parse JSON bodies for API requests
 app.use('/api', express.json());
 
-// Parse raw bodies for Stripe webhooks
-app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
-
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok' });
-});
-
 // API Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/stripe', stripeRoutes);
+app.use('/api/stripe', stripeRoutes); // Modified line
 app.use('/api/subscription', subscriptionRoutes);
 
 // Serve static files in production
