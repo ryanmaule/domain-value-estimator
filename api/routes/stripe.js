@@ -15,6 +15,8 @@ router.post('/create-checkout-session', requireAuth, async (req, res) => {
     const { email } = req.user;
     const { successUrl, cancelUrl } = req.body;
 
+    console.log('[Stripe - Backend] Creating checkout session:', { email, successUrl, cancelUrl }); // Added logging
+
     const session = await stripe.checkout.sessions.create({
       customer_email: email,
       payment_method_types: ['card'],
@@ -31,9 +33,11 @@ router.post('/create-checkout-session', requireAuth, async (req, res) => {
       tax_id_collection: { enabled: true }
     });
 
+    console.log('[Stripe - Backend] Checkout session created successfully:', session); // Added logging
+
     res.json({ sessionId: session.id });
   } catch (error) {
-    console.error('Checkout session error:', error);
+    console.error('[Stripe - Backend] Checkout session error:', error); // Modified logging
     res.status(500).json({ message: 'Failed to create checkout session' });
   }
 });
