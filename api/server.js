@@ -49,9 +49,9 @@ app.use(cookieParser());
 app.use('/api', express.json());
 
 // API Routes
-app.use('/api/stripe/checkout', checkoutRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/stripe', stripeRoutes);
+app.use('/api/stripe', checkoutRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 
 // Serve static files in production
