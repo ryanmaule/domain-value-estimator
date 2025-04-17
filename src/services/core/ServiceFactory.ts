@@ -1,16 +1,11 @@
 import type { ServiceFactory } from './types';
-import WebContainerServiceFactory from '../webcontainer/WebContainerServiceFactory';
-
-const isWebContainer = import.meta.env.VITE_WEBCONTAINER === 'true';
+import ProdServiceFactory from './ProdServiceFactory'; // Assuming you'll name it this
 
 let serviceFactory: ServiceFactory | null = null;
 
 export function getServiceFactory(): ServiceFactory {
   if (!serviceFactory) {
-    if (!isWebContainer) {
-      throw new Error('Only WebContainer environment is currently supported');
-    }
-    serviceFactory = WebContainerServiceFactory.getInstance();
+    serviceFactory = ProdServiceFactory.getInstance();
   }
   return serviceFactory;
 }

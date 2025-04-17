@@ -12,7 +12,6 @@ import 'dotenv/config';
 
 const app = express();
 const port = process.env.PORT || 3001;
-const isWebContainer = process.env.VITE_WEBCONTAINER === 'true';
 const isProduction = process.env.NODE_ENV === 'production';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -28,7 +27,7 @@ app.use((req, res, next) => {
 
 // Security middleware with relaxed settings for WebContainer
 app.use(helmet({
-  contentSecurityPolicy: false,
+  // contentSecurityPolicy: false,  Removed for simplicity, adjust as needed for production
   crossOriginEmbedderPolicy: false,
   crossOriginOpenerPolicy: false,
   crossOriginResourcePolicy: false
@@ -36,7 +35,7 @@ app.use(helmet({
 
 // CORS configuration
 const corsOptions = {
-  origin: isWebContainer ? true : process.env.VITE_APP_URL,
+  origin: process.env.VITE_APP_URL,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key']
@@ -72,7 +71,7 @@ if (isProduction) {
 // Error handling
 app.use((err, req, res, next) => {
   console.error('Server error:', {
-    message: err.message,
+     message: err.message,
     stack: isWebContainer ? err.stack : undefined,
     path: req.path,
     method: req.method
@@ -85,5 +84,5 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(port, '0.0.0.0', () => {
-  console.log(`Server running in ${isWebContainer ? 'WebContainer' : 'production'} mode on port ${port}`);
+  console.log(`Server running on port ${port}`);
 });
