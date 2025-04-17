@@ -10,9 +10,10 @@ const stripe = new Stripe(process.env.VITE_STRIPE_SECRET_KEY, {
 });
 
 // Create checkout session
-router.post('/create-checkout-session', requireAuth, async (req, res) => {
+router.post('/create-checkout-session', async (req, res) => {
   try {
-    const { email } = req.user;
+    // Authentication not required for checkout session creation
+    const { email } = req.body; // Assuming email is passed in the request body
     const { successUrl, cancelUrl } = req.body;
 
     console.log('[Stripe - Backend] Creating checkout session:', { email, successUrl, cancelUrl }); // Added logging
