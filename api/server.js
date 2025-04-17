@@ -27,10 +27,15 @@ app.use((req, res, next) => {
 
 // Security middleware with relaxed settings for WebContainer
 app.use(helmet({
-  // contentSecurityPolicy: false,  Removed for simplicity, adjust as needed for production
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      connectSrc: ["'self'", 'who-dat.as93.net', 'www.googleapis.com', 'api.allorigins.win', 'api.openai.com'],
+    },
+  },
   crossOriginEmbedderPolicy: false,
   crossOriginOpenerPolicy: false,
-  crossOriginResourcePolicy: false
+  crossOriginResourcePolicy: false,
 }));
 
 // CORS configuration
