@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import authRoutes from './routes/auth.js';
 import stripeRoutes from './routes/stripe.js';
+import checkoutRoutes from './routes/checkout.js';
 import subscriptionRoutes from './routes/subscription.js';
 import 'dotenv/config';
 
@@ -48,8 +49,9 @@ app.use(cookieParser());
 app.use('/api', express.json());
 
 // API Routes
+app.use('/api/stripe/checkout', checkoutRoutes);
 app.use('/api/auth', authRoutes);
-app.use('/api/stripe', stripeRoutes); // Modified line
+app.use('/api/stripe', stripeRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 
 // Serve static files in production
